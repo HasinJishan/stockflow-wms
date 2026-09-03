@@ -55,7 +55,7 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       // Connect to your real backend endpoint
-      await axios.post("http://localhost:5000/api/auth/forgot-password", { email });
+      await axios.post("http://   stockflow-wms-backend.onrender.com/api/auth/forgot-password", { email });
       setSent(true);
     } catch (err) {
       setError(err.response?.data?.message || "User not found or server error.");

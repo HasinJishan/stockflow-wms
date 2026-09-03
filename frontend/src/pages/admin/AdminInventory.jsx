@@ -67,7 +67,7 @@ export default function AdminInventory() {
     const fetchProducts = async () => {
       try {
         const token = localStorage.getItem("sf_token");
-        const res = await axios.get("http://localhost:5000/api/products", {
+        const res = await axios.get("http://   stockflow-wms-backend.onrender.com/api/products", {
           headers: { Authorization: `Bearer ${token}` }
         });
         setProducts(res.data);

@@ -66,7 +66,7 @@ export default function ResetPassword() {
     setLoading(true);
     try {
       // Connect to your backend PUT route
-      await axios.put(`http://localhost:5000/api/auth/reset-password/${token}`, { 
+      await axios.put(`http://   stockflow-wms-backend.onrender.com/api/auth/reset-password/${token}`, { 
         password: form.password 
       });
       setDone(true);

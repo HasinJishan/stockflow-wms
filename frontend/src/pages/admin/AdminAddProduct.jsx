@@ -96,7 +96,7 @@ export default function AdminAddProduct() {
         status: Number(form.openingStock) <= Number(form.reorderLevel) ? "Low stock" : "In stock"
       };
 
-      await axios.post('http://localhost:5000/api/products', payload, {
+      await axios.post('http://   stockflow-wms-backend.onrender.com/api/products', payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

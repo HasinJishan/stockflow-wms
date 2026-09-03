@@ -35,7 +35,7 @@ export default function AdminEditProduct() {
     const fetchProduct = async () => {
       try {
         const token = localStorage.getItem("sf_token");
-        const res = await axios.get(`http://localhost:5000/api/products/${id}`, {
+        const res = await axios.get(`http://   stockflow-wms-backend.onrender.com/api/products/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setFormData(res.data);
@@ -58,7 +58,7 @@ export default function AdminEditProduct() {
     e.preventDefault();
     try {
       const token = localStorage.getItem("sf_token");
-      await axios.put(`http://localhost:5000/api/products/${id}`, formData, {
+      await axios.put(`http://   stockflow-wms-backend.onrender.com/api/products/${id}`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert("Product updated successfully!");
@@ -73,7 +73,7 @@ export default function AdminEditProduct() {
     if (window.confirm("Delete this product permanently? This cannot be undone.")) {
       try {
         const token = localStorage.getItem("sf_token");
-        await axios.delete(`http://localhost:5000/api/products/${id}`, {
+        await axios.delete(`http://   stockflow-wms-backend.onrender.com/api/products/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         navigate("/admin/inventory");
