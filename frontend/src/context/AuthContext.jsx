@@ -4,7 +4,7 @@ import axios from "axios";
 const AuthContext = createContext(null);
 
 // Change this if your backend port changes
-const API_URL = "https://stockflow-wms-backend.onrender.com/api";
+const API_URL = "https://stockflow-wms-backend.onrender.com/api/auth";
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
