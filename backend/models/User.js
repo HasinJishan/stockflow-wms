@@ -21,7 +21,11 @@ const UserSchema = new mongoose.Schema({
         enum: ['admin', 'staff', 'customer'], 
         default: 'customer' 
     },
-    // Added for Forgot/Reset Password functionality
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    verificationToken: String,
     resetPasswordToken: String,
     resetPasswordExpire: Date
 }, { timestamps: true });

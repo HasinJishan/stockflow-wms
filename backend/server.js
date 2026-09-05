@@ -22,6 +22,8 @@ const { protect } = require('./middleware/authMiddleware');
 // Only protected users can access products
 app.use('/api/products', protect, require('./routes/productRoutes'));
 
+app.use('/api/users', require('./routes/userRoutes'));
+
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ DB Connected Successfully"))

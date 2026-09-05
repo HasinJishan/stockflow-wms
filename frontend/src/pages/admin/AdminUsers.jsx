@@ -1,15 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
-
-const MOCK_USERS = [
-  { id: 1, name: "Alex Rivera", email: "alex@stockflow.com", role: "Admin", status: "Active", lastActive: "2 min ago" },
-  { id: 2, name: "Maria Kim", email: "maria@stockflow.com", role: "Warehouse staff", status: "Active", lastActive: "12 min ago" },
-  { id: 3, name: "James Osei", email: "james@stockflow.com", role: "Manager", status: "Active", lastActive: "1 hr ago" },
-  { id: 4, name: "Priya Raman", email: "priya@warehouse.com", role: "Customer", status: "Active", lastActive: "3 hr ago" },
-  { id: 5, name: "Daniel Lopez", email: "daniel@stockflow.com", role: "Warehouse staff", status: "Invited", lastActive: "—" },
-  { id: 6, name: "Nora Haddad", email: "nora@stockflow.com", role: "Admin", status: "Suspended", lastActive: "2 days ago" },
-];
 
 const ROLE_FILTERS = ["All roles", "Admin", "Manager", "Warehouse staff", "Customer"];
 
@@ -115,9 +107,35 @@ function RowMenu({ user, onUpdateRole, onToggleStatus, onDelete }) {
 
 export default function AdminUsers() {
   const navigate = useNavigate();
-  const [users, setUsers] = useState(MOCK_USERS);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All roles");
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/users', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const mapped = res.data.map(u => ({
+          id: u._id,
+          name: u.fullName,
+          email: u.email,
+          role: u.role === 'staff' ? 'Warehouse staff' : u.role.charAt(0).toUpperCase() + u.role.slice(1),
+          status: u.isVerified ? "Active" : "Invited",
+          lastActive: "—"
+        }));
+        setUsers(mapped);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
@@ -197,7 +215,9 @@ export default function AdminUsers() {
 
         <div className="panel">
           <div className="table-scroll">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="empty">Loading users…</div>
+            ) : filtered.length === 0 ? (
               <div className="empty">No users match your search or filter.</div>
             ) : (
               <table>
