@@ -26,13 +26,18 @@ exports.register = async (req, res) => {
             verificationToken: vToken 
         });
 
-        // Professional: Send Verification Email
+        // Professional: Send Verification Email (won't block registration if it fails)
         const vUrl = `${process.env.FRONTEND_URL}/verify-email/${vToken}`;
-        await sendEmail({
-            email: user.email,
-            subject: 'Verify your Account',
-            message: `<h1>Welcome to WMS</h1><p>Click <a href="${vUrl}">here</a> to verify your email.</p>`
-        });
+        try {
+            await sendEmail({
+                email: user.email,
+                subject: 'Verify your Account',
+                message: `<h1>Welcome to WMS</h1><p>Click <a href="${vUrl}">here</a> to verify your email.</p>`
+            });
+        } catch (emailError) {
+            console.error("⚠️ Verification email failed to send:", emailError.message);
+            // Registration still succeeds even if email fails
+        }
 
         res.status(201).json({ message: "Registered! Please check your email to verify your account." });
     } catch (error) {
@@ -49,9 +54,10 @@ exports.login = async (req, res) => {
         if (!user) return res.status(400).json({ message: "Invalid Credentials" });
 
         // Security: Block unverified users
-        if (!user.isVerified) {
-            return res.status(401).json({ message: "Please verify your email address first." });
-        }
+        // TEMPORARILY DISABLED until email verification works for all users (Resend sandbox limit)
+        // if (!user.isVerified) {
+        //     return res.status(401).json({ message: "Please verify your email address first." });
+        // }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
@@ -80,7 +86,6 @@ exports.forgotPassword = async (req, res) => {
 
         await user.save();
 
-        // Professional: Send actual Reset Link
         const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
         
         try {
