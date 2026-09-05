@@ -79,7 +79,7 @@ export default function Signup() {
     setLoading(true);
     try {
       // API call to your backend
-      const res = await axios.post('http://   stockflow-wms-backend.onrender.com/api/auth/register', form);
+      const res = await axios.post('https://stockflow-wms-backend.onrender.com/api/auth/register', form);
       
       if (res.status === 201) {
         alert("Account created! You can now log in.");
