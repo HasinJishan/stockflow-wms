@@ -9,10 +9,10 @@ const sendEmail = async (options) => {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
-        // ADD THIS BLOCK TO FIX THE CERTIFICATE ERROR
         tls: {
             rejectUnauthorized: false
-        }
+        },
+        family: 4 // Force IPv4 - fixes Render's ENETUNREACH error over IPv6
     });
 
     const mailOptions = {
