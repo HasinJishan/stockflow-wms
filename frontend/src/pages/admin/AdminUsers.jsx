@@ -7,7 +7,6 @@ const ROLE_FILTERS = ["All roles", "Admin", "Manager", "Warehouse staff", "Custo
 
 const STATUS_BADGE = { Active: "green", Invited: "gray", Suspended: "red" };
 
-const slugify = (name) => name.toLowerCase().replace(/\s+/g, "-");
 const initials = (name) => name.split(" ").map((n) => n[0]).join("").toUpperCase();
 
 const STYLES = `
@@ -154,7 +153,7 @@ export default function AdminUsers() {
     customers: users.filter((u) => u.role === "Customer").length,
   }), [users]);
 
-  const handleUpdateRole = (user) => navigate(`/admin/users/${slugify(user.name)}/role`);
+  const handleUpdateRole = (user) => navigate(`/admin/users/${user.id}/role`);
 
   const handleToggleStatus = (user) => {
     setUsers((prev) =>
@@ -164,9 +163,17 @@ export default function AdminUsers() {
     );
   };
 
-  const handleDelete = (user) => {
+  const handleDelete = async (user) => {
     if (window.confirm(`Delete ${user.name}? This cannot be undone.`)) {
-      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      try {
+        const token = localStorage.getItem('sf_token');
+        await axios.delete(`https://stockflow-wms-backend.onrender.com/api/users/${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      } catch (err) {
+        alert(err.response?.data?.message || "Failed to delete user.");
+      }
     }
   };
 
