@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
 const WAREHOUSES = [
@@ -96,20 +97,28 @@ export default function AdminAddUser() {
     return (a + b).toUpperCase() || "?";
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setError("");
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
       setError("First name, last name, and email are required.");
       return;
     }
     setSaving(true);
-    // Replace with your real create-user API call, e.g.:
-    // await fetch('/api/users', { method: 'POST', body: JSON.stringify({ ...form, role, sendInvite }) });
-    setTimeout(() => {
-      setSaving(false);
-      alert(`User "${form.firstName} ${form.lastName}" added as ${role}. Wire this up to your API.`);
+    try {
+      const token = localStorage.getItem('sf_token');
+      const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`;
+      const res = await axios.post(
+        'https://stockflow-wms-backend.onrender.com/api/users',
+        { fullName, email: form.email.trim(), role },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert(`User "${fullName}" added as ${role}.\n\nTemporary password: ${res.data.tempPassword}\n\nShare this with them securely — they can change it after logging in.`);
       navigate("/admin/users");
-    }, 600);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to add user.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

@@ -1,44 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-
-const MOCK_USERS = {
-  "alex-rivera": {
-    name: "Alex Rivera", email: "alex@stockflow.com", initials: "AR",
-    currentRole: "Admin", status: "Active", warehouse: "Coimbatore",
-    joined: "Jan 14, 2026", lastActive: "2 min ago",
-    history: [["Admin", "Jan 14, 2026"]],
-  },
-  "maria-kim": {
-    name: "Maria Kim", email: "maria@stockflow.com", initials: "MK",
-    currentRole: "Warehouse staff", status: "Active", warehouse: "Coimbatore",
-    joined: "Mar 12, 2026", lastActive: "12 min ago",
-    history: [["Warehouse staff", "Mar 12, 2026"]],
-  },
-  "james-osei": {
-    name: "James Osei", email: "james@stockflow.com", initials: "JO",
-    currentRole: "Manager", status: "Active", warehouse: "Chennai",
-    joined: "Feb 3, 2026", lastActive: "1 hr ago",
-    history: [["Warehouse staff", "Feb 3, 2026"], ["Manager", "May 18, 2026"]],
-  },
-  "priya-raman": {
-    name: "Priya Raman", email: "priya@warehouse.com", initials: "PR",
-    currentRole: "Customer", status: "Active", warehouse: "—",
-    joined: "Apr 20, 2026", lastActive: "3 hr ago",
-    history: [["Customer", "Apr 20, 2026"]],
-  },
-  "daniel-lopez": {
-    name: "Daniel Lopez", email: "daniel@stockflow.com", initials: "DL",
-    currentRole: "Warehouse staff", status: "Invited", warehouse: "Bengaluru",
-    joined: "Aug 20, 2026", lastActive: "—",
-    history: [["Warehouse staff", "Aug 20, 2026"]],
-  },
-  "nora-haddad": {
-    name: "Nora Haddad", email: "nora@stockflow.com", initials: "NH",
-    currentRole: "Admin", status: "Suspended", warehouse: "Coimbatore",
-    joined: "Jan 20, 2026", lastActive: "2 days ago",
-    history: [["Manager", "Jan 20, 2026"], ["Admin", "Apr 2, 2026"]],
-  },
-};
+import axios from "axios";
 
 const ROLES = [
   ["Admin", "Full access to inventory, orders, users, reports, analytics, and settings."],
@@ -165,36 +127,80 @@ const LogoMark = () => (
   </div>
 );
 
+const roleFromBackend = (r) => (r === 'staff' ? 'Warehouse staff' : r.charAt(0).toUpperCase() + r.slice(1));
+const initials = (name) => name.split(" ").map((n) => n[0]).join("").toUpperCase();
+
 export default function AdminUpdateRole() {
   const navigate = useNavigate();
   const { userId } = useParams();
-  const user = MOCK_USERS[userId] || MOCK_USERS["maria-kim"];
-
-  const [newRole, setNewRole] = useState(
-    ROLES.find(([name]) => name !== user.currentRole)?.[0] || "Manager"
-  );
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [newRole, setNewRole] = useState("Manager");
   const [reason, setReason] = useState(REASONS[0]);
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const currentPerms = PERMS[user.currentRole];
-  const newPerms = PERMS[newRole];
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get(`https://stockflow-wms-backend.onrender.com/api/users/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const u = res.data;
+        const mappedUser = {
+          name: u.fullName,
+          email: u.email,
+          initials: initials(u.fullName),
+          currentRole: roleFromBackend(u.role),
+          status: u.isVerified ? "Active" : "Invited",
+          warehouse: "—",
+          joined: new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          lastActive: "—",
+        };
+        setUser(mappedUser);
+        setNewRole(ROLES.find(([name]) => name !== mappedUser.currentRole)?.[0] || "Manager");
+      } catch (err) {
+        console.error("Failed to fetch user:", err);
+        alert("Could not load user.");
+        navigate("/admin/users");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUser();
+  }, [userId, navigate]);
 
-  const handleSave = () => {
-    if (newRole === user.currentRole) {
+  const handleSave = async () => {
+    if (!user || newRole === user.currentRole) {
       alert("Select a different role to save a change.");
       return;
     }
     setSaving(true);
-    // Replace with your real role-update API call, e.g.:
-    // await fetch(`/api/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify({ newRole, reason, effectiveDate, notes }) });
-    setTimeout(() => {
-      setSaving(false);
-      alert(`${user.name}'s role changed from ${user.currentRole} to ${newRole}. Wire this up to your API.`);
+    try {
+      const token = localStorage.getItem('sf_token');
+      await axios.patch(
+        `https://stockflow-wms-backend.onrender.com/api/users/${userId}/role`,
+        { role: newRole },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert(`${user.name}'s role changed from ${user.currentRole} to ${newRole}.`);
       navigate("/admin/users");
-    }, 600);
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update role.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return <div style={{ padding: 48, fontFamily: "Inter, sans-serif" }}>Loading user…</div>;
+  }
+  if (!user) return null;
+
+  const currentPerms = PERMS[user.currentRole] || PERMS.Customer;
+  const newPerms = PERMS[newRole] || PERMS.Customer;
 
   return (
     <div className="aur">
@@ -245,18 +251,6 @@ export default function AdminUpdateRole() {
                 <div className="info-row"><span className="info-label">Warehouse</span><span className="info-value">{user.warehouse}</span></div>
                 <div className="info-row"><span className="info-label">Joined</span><span className="info-value">{user.joined}</span></div>
                 <div className="info-row"><span className="info-label">Last active</span><span className="info-value">{user.lastActive}</span></div>
-              </div>
-
-              <div className="panel">
-                <div className="panel-title">Role change history</div>
-                {user.history.map(([role, date]) => (
-                  <div className="history-row" key={role + date}>
-                    <span>{role}</span><span style={{ color: "#9CA3AF" }}>{date}</span>
-                  </div>
-                ))}
-                {user.history.length <= 1 && (
-                  <div className="history-row" style={{ color: "#9CA3AF" }}>No prior changes</div>
-                )}
               </div>
             </div>
 
