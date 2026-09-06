@@ -29,12 +29,11 @@ const OrderSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Auto-increment orderNumber starting at 10001
-OrderSchema.pre('save', async function (next) {
+OrderSchema.pre('save', async function () {
     if (this.isNew) {
         const lastOrder = await this.constructor.findOne().sort({ orderNumber: -1 });
         this.orderNumber = lastOrder ? lastOrder.orderNumber + 1 : 10001;
     }
-    next();
 });
 
 module.exports = mongoose.model('Order', OrderSchema);
