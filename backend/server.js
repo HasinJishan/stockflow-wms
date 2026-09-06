@@ -23,6 +23,8 @@ const { protect } = require('./middleware/authMiddleware');
 app.use('/api/products', protect, require('./routes/productRoutes'));
 
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/orders', require('./routes/orderRoutes'));
+
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)

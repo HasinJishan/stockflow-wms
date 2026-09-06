@@ -1,16 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
-
-const ORDERS = [
-  { id: "#10432", customer: "Priya Raman", items: 3, total: "$142.00", date: "Jul 24", status: "Shipped" },
-  { id: "#10433", customer: "Daniel Osei", items: 1, total: "$38.50", date: "Jul 24", status: "Processing" },
-  { id: "#10434", customer: "Wei Zhang", items: 5, total: "$276.20", date: "Jul 23", status: "Pending" },
-  { id: "#10435", customer: "Amara Okafor", items: 2, total: "$91.00", date: "Jul 23", status: "Delivered" },
-  { id: "#10436", customer: "Lucas Ferreira", items: 4, total: "$203.40", date: "Jul 22", status: "Delivered" },
-  { id: "#10437", customer: "Nora Haddad", items: 1, total: "$52.00", date: "Jul 22", status: "Shipped" },
-  { id: "#10438", customer: "Kenji Sato", items: 6, total: "$318.90", date: "Jul 21", status: "Pending" },
-];
 
 const STATUS_TABS = ["All", "Pending", "Processing", "Shipped", "Delivered"];
 
@@ -99,22 +90,56 @@ const ExportIcon = () => (
 
 export default function AdminOrders() {
   const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
 
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/orders', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const mapped = res.data.map(o => ({
+          id: `#${o.orderNumber}`,
+          rawId: o.orderNumber,
+          customer: o.customer?.fullName || "Unknown",
+          items: o.items.length,
+          total: `$${o.total.toFixed(2)}`,
+          date: new Date(o.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          status: o.status
+        }));
+        setOrders(mapped);
+      } catch (err) {
+        console.error("Failed to fetch orders:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrders();
+  }, []);
+
   const filtered = useMemo(() => {
-    return ORDERS.filter((o) => {
+    return orders.filter((o) => {
       const matchesQuery =
         o.id.toLowerCase().includes(query.toLowerCase()) ||
         o.customer.toLowerCase().includes(query.toLowerCase());
       const matchesStatus = status === "All" || o.status === status;
       return matchesQuery && matchesStatus;
     });
-  }, [query, status]);
+  }, [orders, query, status]);
+
+  const kpis = useMemo(() => ({
+    total: orders.length,
+    processing: orders.filter(o => o.status === "Processing").length,
+    shipped: orders.filter(o => o.status === "Shipped").length,
+    delivered: orders.filter(o => o.status === "Delivered").length,
+  }), [orders]);
 
   const handleRowClick = (rawId) => {
-    const cleanId = rawId.replace("#", "");
-    navigate(`/admin/orders/${cleanId}`);
+    navigate(`/admin/orders/${rawId}`);
   };
 
   return (
@@ -138,10 +163,10 @@ export default function AdminOrders() {
         <style>{STYLES}</style>
 
         <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Total orders</div><div className="kpi-value">3,842</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Processing</div><div className="kpi-value">28</div></div>
-          <div className="kpi-card"><div className="kpi-label">Shipped today</div><div className="kpi-value">96</div></div>
-          <div className="kpi-card success"><div className="kpi-label">Delivered this week</div><div className="kpi-value">512</div></div>
+          <div className="kpi-card"><div className="kpi-label">Total orders</div><div className="kpi-value">{kpis.total}</div></div>
+          <div className="kpi-card warning"><div className="kpi-label">Processing</div><div className="kpi-value">{kpis.processing}</div></div>
+          <div className="kpi-card"><div className="kpi-label">Shipped</div><div className="kpi-value">{kpis.shipped}</div></div>
+          <div className="kpi-card success"><div className="kpi-label">Delivered</div><div className="kpi-value">{kpis.delivered}</div></div>
         </div>
 
         <div className="toolbar">
@@ -167,7 +192,9 @@ export default function AdminOrders() {
         </div>
 
         <div className="panel">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="empty">Loading orders…</div>
+          ) : filtered.length === 0 ? (
             <div className="empty">No orders match your search or filter.</div>
           ) : (
             <table>
@@ -181,10 +208,10 @@ export default function AdminOrders() {
                   <tr 
                     key={o.id} 
                     className="clickable-row" 
-                    onClick={() => handleRowClick(o.id)}
+                    onClick={() => handleRowClick(o.rawId)}
                   >
                     <td>
-                      <Link to={`/admin/orders/${o.id.replace("#", "")}`} className="order-link" onClick={(e) => e.stopPropagation()}>
+                      <Link to={`/admin/orders/${o.rawId}`} className="order-link" onClick={(e) => e.stopPropagation()}>
                         {o.id}
                       </Link>
                     </td>

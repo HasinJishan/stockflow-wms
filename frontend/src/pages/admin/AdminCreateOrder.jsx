@@ -1,20 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
-
-const AVAILABLE_PRODUCTS = [
-  { id: "p1", name: "Corrugated box (M)", price: 1.20, sku: "PKG-1042" },
-  { id: "p2", name: "Packing tape (48mm)", price: 2.90, sku: "PKG-1098" },
-  { id: "p3", name: "Warehouse gloves (L)", price: 4.75, sku: "APP-3305" },
-  { id: "p4", name: "Pallet wrap 20\"", price: 8.50, sku: "PKG-2210" },
-  { id: "p5", name: "Shipping labels (roll)", price: 6.10, sku: "PKG-1187" },
-];
-
-const CUSTOMERS = [
-  { id: "c1", name: "Priya Raman", email: "priya@warehouse.com", orders: 24, phone: "+91 98765 43210", address: "Home — 42 Race Course Road, RS Puram, Coimbatore" },
-  { id: "c2", name: "Daniel Osei", email: "daniel@warehouse.com", orders: 12, phone: "+91 98123 45678", address: "Office — 121 Avinashi Road, Peelamedu, Coimbatore" },
-  { id: "c3", name: "Wei Zhang", email: "wei@warehouse.com", orders: 5, phone: "+91 97654 32109", address: "88 Trichy Road, Singanallur, Coimbatore" }
-];
 
 const STYLES = `
   .co-container { font-family: 'Inter', sans-serif; color: #111827; max-width: 1200px; margin: 0 auto; }
@@ -48,6 +35,7 @@ const STYLES = `
   
   .btn-secondary { background: #FFFFFF; border: 1px solid #D1D5DB; color: #374151; padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 13px; }
   .btn-primary { background: #2563EB; border: none; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 13px; }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
   @media (max-width: 900px) {
     .co-grid { grid-template-columns: 1fr; }
@@ -58,21 +46,50 @@ const STYLES = `
 
 export default function AdminCreateOrder() {
   const navigate = useNavigate();
-  
-  const [selectedCustomer, setSelectedCustomer] = useState(CUSTOMERS[0]);
+
+  const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [orderStatus, setOrderStatus] = useState("Confirmed");
   const [shippingMethod, setShippingMethod] = useState("Standard");
-  const [deliveryAddress, setDeliveryAddress] = useState(CUSTOMERS[0].address);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Charge saved card — Visa •••• 4242");
-  
-  const [items, setItems] = useState([
-    { id: 1, productId: "p1", name: "Corrugated box (M)", price: 1.20, qty: 10 },
-    { id: 2, productId: "p2", name: "Packing tape (48mm)", price: 2.90, qty: 2 },
-    { id: 3, productId: "p3", name: "Warehouse gloves (L)", price: 4.75, qty: 1 }
-  ]);
+  const [paymentMethod, setPaymentMethod] = useState("Cash on Delivery");
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const [usersRes, productsRes] = await Promise.all([
+          axios.get('https://stockflow-wms-backend.onrender.com/api/users', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('https://stockflow-wms-backend.onrender.com/api/products', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+
+        const customerList = usersRes.data.filter(u => u.role === 'customer');
+        setCustomers(customerList);
+
+        setProducts(productsRes.data);
+        if (productsRes.data.length > 0) {
+          const first = productsRes.data[0];
+          setItems([{ id: Date.now(), productId: first._id, name: first.name, sku: first.sku, price: first.price, qty: 1 }]);
+        }
+      } catch (err) {
+        console.error("Failed to load customers/products:", err);
+      } finally {
+        setLoadingData(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const subtotal = items.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const shippingCost = shippingMethod === "Express" ? 15.00 : 8.00;
@@ -82,14 +99,13 @@ export default function AdminCreateOrder() {
   const handleCustomerSelect = (cust) => {
     setSelectedCustomer(cust);
     setCustomerSearch("");
-    setDeliveryAddress(cust.address);
     setShowCustomerDropdown(false);
   };
 
   const handleProductChange = (rowId, prodId) => {
-    const selectedProd = AVAILABLE_PRODUCTS.find(p => p.id === prodId);
+    const selectedProd = products.find(p => p._id === prodId);
     if (!selectedProd) return;
-    setItems(items.map(item => item.id === rowId ? { ...item, productId: selectedProd.id, name: selectedProd.name, price: selectedProd.price } : item));
+    setItems(items.map(item => item.id === rowId ? { ...item, productId: selectedProd._id, name: selectedProd.name, sku: selectedProd.sku, price: selectedProd.price } : item));
   };
 
   const handleQtyChange = (rowId, qty) => {
@@ -97,8 +113,9 @@ export default function AdminCreateOrder() {
   };
 
   const handleAddItem = () => {
-    const defaultProd = AVAILABLE_PRODUCTS[0];
-    setItems([...items, { id: Date.now(), productId: defaultProd.id, name: defaultProd.name, price: defaultProd.price, qty: 1 }]);
+    if (products.length === 0) return;
+    const defaultProd = products[0];
+    setItems([...items, { id: Date.now(), productId: defaultProd._id, name: defaultProd.name, sku: defaultProd.sku, price: defaultProd.price, qty: 1 }]);
   };
 
   const handleRemoveItem = (rowId) => {
@@ -106,11 +123,41 @@ export default function AdminCreateOrder() {
     setItems(items.filter(item => item.id !== rowId));
   };
 
-  const handleCreateOrder = (e) => {
+  const handleCreateOrder = async (e) => {
     e.preventDefault();
-    alert(`Order Created Successfully!\nTotal: $${total.toFixed(2)}\nCustomer: ${selectedCustomer.name}`);
-    navigate("/admin/orders/10432");
+    if (!selectedCustomer) return alert("Please select a customer.");
+    if (!deliveryAddress.trim()) return alert("Please enter a delivery address.");
+
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('sf_token');
+      const payload = {
+        customer: selectedCustomer._id,
+        items: items.map(({ productId, name, sku, price, qty }) => ({ product: productId, name, sku, price, qty })),
+        shippingMethod,
+        deliveryAddress,
+        paymentMethod,
+        notes: orderNotes
+      };
+      const res = await axios.post('https://stockflow-wms-backend.onrender.com/api/orders', payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert(`Order Created Successfully!\nTotal: $${res.data.order.total.toFixed(2)}\nCustomer: ${selectedCustomer.fullName}`);
+      navigate(`/admin/orders/${res.data.order.orderNumber}`);
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to create order.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loadingData) {
+    return (
+      <DashboardLayout title="Create order" subtitle="Manually create an order on behalf of a customer.">
+        <div style={{ padding: 40, fontFamily: "Inter, sans-serif" }}>Loading customers and products…</div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout
@@ -119,33 +166,41 @@ export default function AdminCreateOrder() {
       actions={
         <div style={{ display: "flex", gap: "10px" }}>
           <button type="button" className="btn-secondary" onClick={() => navigate("/admin/orders")}>Cancel</button>
-          <button type="button" className="btn-primary" onClick={handleCreateOrder}>Create order</button>
+          <button type="button" className="btn-primary" onClick={handleCreateOrder} disabled={saving}>
+            {saving ? "Creating…" : "Create order"}
+          </button>
         </div>
       }
     >
       <div className="co-container">
         <style>{STYLES}</style>
         <form onSubmit={handleCreateOrder} className="co-grid">
-          
+
           <div>
             <div className="co-card">
               <h2 className="card-title">Customer</h2>
               <div className="form-group">
                 <label>Search by name or email</label>
-                <input 
-                  type="text" 
-                  value={customerSearch} 
+                <input
+                  type="text"
+                  value={customerSearch}
                   onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
                   onFocus={() => setShowCustomerDropdown(true)}
                   placeholder="Type to search..."
                 />
                 {showCustomerDropdown && (
                   <div className="customer-dropdown">
-                    {CUSTOMERS.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.email.toLowerCase().includes(customerSearch.toLowerCase())).map(c => (
-                      <div key={c.id} className="customer-option" onClick={() => handleCustomerSelect(c)}>
-                        <strong>{c.name}</strong> — <span style={{ color: '#6B7280' }}>{c.email}</span>
-                      </div>
-                    ))}
+                    {customers.length === 0 ? (
+                      <div className="customer-option" style={{ color: "#9CA3AF" }}>No customers found</div>
+                    ) : (
+                      customers
+                        .filter(c => c.fullName.toLowerCase().includes(customerSearch.toLowerCase()) || c.email.toLowerCase().includes(customerSearch.toLowerCase()))
+                        .map(c => (
+                          <div key={c._id} className="customer-option" onClick={() => handleCustomerSelect(c)}>
+                            <strong>{c.fullName}</strong> — <span style={{ color: '#6B7280' }}>{c.email}</span>
+                          </div>
+                        ))
+                    )}
                   </div>
                 )}
               </div>
@@ -153,10 +208,10 @@ export default function AdminCreateOrder() {
               {selectedCustomer && (
                 <div className="customer-selected-card">
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div className="avatar-badge">{selectedCustomer.name.split(" ").map(n => n[0]).join("")}</div>
+                    <div className="avatar-badge">{selectedCustomer.fullName.split(" ").map(n => n[0]).join("")}</div>
                     <div>
-                      <div style={{ fontSize: "13px", fontWeight: 600 }}>{selectedCustomer.name}</div>
-                      <div style={{ fontSize: "11px", color: "#6B7280" }}>{selectedCustomer.email} · {selectedCustomer.orders} previous orders</div>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>{selectedCustomer.fullName}</div>
+                      <div style={{ fontSize: "11px", color: "#6B7280" }}>{selectedCustomer.email}</div>
                     </div>
                   </div>
                   <button type="button" className="btn-secondary" style={{ padding: "2px 8px", fontSize: "11px" }} onClick={() => setShowCustomerDropdown(true)}>Change</button>
@@ -177,8 +232,8 @@ export default function AdminCreateOrder() {
                 <div className="item-row" key={item.id}>
                   <div>
                     <select value={item.productId} onChange={(e) => handleProductChange(item.id, e.target.value)}>
-                      {AVAILABLE_PRODUCTS.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} — ${p.price.toFixed(2)}</option>
+                      {products.map(p => (
+                        <option key={p._id} value={p._id}>{p.name} — ${p.price.toFixed(2)}</option>
                       ))}
                     </select>
                   </div>
@@ -200,7 +255,7 @@ export default function AdminCreateOrder() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }} className="form-group">
                 <div>
                   <label>Delivery address</label>
-                  <input type="text" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} />
+                  <input type="text" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Enter full delivery address" />
                 </div>
                 <div>
                   <label>Shipping method</label>
@@ -219,14 +274,6 @@ export default function AdminCreateOrder() {
 
           <div>
             <div className="co-card">
-              <h2 className="card-title">Order status</h2>
-              <div className="status-toggle">
-                <button type="button" className={`status-btn ${orderStatus === "Draft" ? "active" : ""}`} onClick={() => setOrderStatus("Draft")}>Draft</button>
-                <button type="button" className={`status-btn ${orderStatus === "Confirmed" ? "active" : ""}`} onClick={() => setOrderStatus("Confirmed")}>Confirmed</button>
-              </div>
-            </div>
-
-            <div className="co-card">
               <h2 className="card-title">Order summary</h2>
               <div className="summary-row"><span>Subtotal ({items.length} items)</span><span>${subtotal.toFixed(2)}</span></div>
               <div className="summary-row"><span>Shipping</span><span>${shippingCost.toFixed(2)}</span></div>
@@ -239,8 +286,8 @@ export default function AdminCreateOrder() {
               <div className="form-group">
                 <label>Payment method</label>
                 <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                  <option value="Charge saved card — Visa •••• 4242">Charge saved card — Visa •••• 4242</option>
-                  <option value="Cash on Delivery (COD)">Cash on Delivery (COD)</option>
+                  <option value="Cash on Delivery">Cash on Delivery (COD)</option>
+                  <option value="Card">Card</option>
                   <option value="Bank Transfer">Bank Transfer</option>
                 </select>
               </div>
