@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip,
@@ -7,50 +8,6 @@ import DashboardLayout from "../../components/DashboardLayout";
 import ExportModal from "../../components/ExportModal";
 
 const RANGES = ["7D", "30D", "90D", "1Y"];
-
-const REVENUE_BY_RANGE = {
-  "7D": [
-    { label: "Mon", value: 1420 }, { label: "Tue", value: 1680 }, { label: "Wed", value: 1510 },
-    { label: "Thu", value: 1890 }, { label: "Fri", value: 2210 }, { label: "Sat", value: 980 }, { label: "Sun", value: 720 },
-  ],
-  "30D": [
-    { label: "Week 1", value: 10200 }, { label: "Week 2", value: 11800 },
-    { label: "Week 3", value: 12400 }, { label: "Week 4", value: 13810 },
-  ],
-  "90D": [
-    { label: "Month 1", value: 32400 }, { label: "Month 2", value: 38100 }, { label: "Month 3", value: 41960 },
-  ],
-  "1Y": [
-    { label: "Q1", value: 98000 }, { label: "Q2", value: 112400 },
-    { label: "Q3", value: 121800 }, { label: "Q4", value: 138200 },
-  ],
-};
-
-const KPI_BY_RANGE = {
-  "7D": { revenue: "$10,410", orders: 612, aov: "$17.01", returnRate: "1.8%" },
-  "30D": { revenue: "$48,210", orders: 2940, aov: "$16.40", returnRate: "2.1%" },
-  "90D": { revenue: "$112,460", orders: 8340, aov: "$13.48", returnRate: "2.4%" },
-  "1Y": { revenue: "$470,400", orders: 33120, aov: "$14.20", returnRate: "2.6%" },
-};
-
-const WAREHOUSE_DATA = [
-  { name: "Coimbatore", value: 1820 },
-  { name: "Chennai", value: 940 },
-  { name: "Bengaluru", value: 180 },
-];
-
-const TOP_PRODUCTS = [
-  { name: "Handheld RF terminal", units: 142, revenue: "$44,020" },
-  { name: "Barcode scanner X200", units: 218, revenue: "$28,122" },
-  { name: "Warehouse gloves (L)", units: 1840, revenue: "$8,740" },
-  { name: "Corrugated box (M)", units: 3120, revenue: "$3,744" },
-];
-
-const SEGMENTS = [
-  { name: "New customers", value: 32, color: "#DCE9FD" },
-  { name: "Returning", value: 48, color: "#5C90F2" },
-  { name: "VIP (10+ orders)", value: 20, color: "#2F6FED" },
-];
 
 const STYLES = `
   .an * { box-sizing: border-box; }
@@ -83,6 +40,8 @@ const STYLES = `
   .an .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .an .legend-value { margin-left: auto; font-weight: 600; color: #111827; }
 
+  .an .empty { text-align: center; padding: 20px; color: #9CA3AF; font-size: 13px; }
+
   .an .app-footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #E5E5E0; font-size: 12px; color: #9CA3AF; text-align: center; }
   .an .app-footer a { color: #9CA3AF; text-decoration: none; }
 
@@ -105,11 +64,26 @@ const DownloadIcon = () => (
 export default function AdminAnalytics() {
   const [range, setRange] = useState("30D");
   const [exportOpen, setExportOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const revenueData = REVENUE_BY_RANGE[range];
-  const kpi = KPI_BY_RANGE[range];
-
-  const totalSegments = useMemo(() => SEGMENTS.reduce((sum, s) => sum + s.value, 0), []);
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get(`https://stockflow-wms-backend.onrender.com/api/analytics?range=${range}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setData(res.data);
+      } catch (err) {
+        console.error("Failed to fetch analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, [range]);
 
   return (
     <DashboardLayout
@@ -137,80 +111,106 @@ export default function AdminAnalytics() {
       <div className="an">
         <style>{STYLES}</style>
 
-        <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Revenue ({range.toLowerCase()})</div><div className="kpi-value">{kpi.revenue}</div></div>
-          <div className="kpi-card success"><div className="kpi-label">Orders ({range.toLowerCase()})</div><div className="kpi-value">{kpi.orders.toLocaleString()}</div></div>
-          <div className="kpi-card"><div className="kpi-label">Avg. order value</div><div className="kpi-value">{kpi.aov}</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Return rate</div><div className="kpi-value">{kpi.returnRate}</div></div>
-        </div>
-
-        <div className="charts-row">
-          <div className="panel">
-            <div className="panel-title">Revenue trend</div>
-            <ResponsiveContainer width="100%" height={210}>
-              <LineChart data={revenueData}>
-                <CartesianGrid vertical={false} stroke="#EEEDE7" />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => `$${v.toLocaleString()}`} />
-                <Line type="monotone" dataKey="value" stroke="#2F6FED" strokeWidth={2.5} dot={{ r: 3, fill: "#2F6FED" }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="panel">
-            <div className="panel-title">Warehouse performance</div>
-            <ResponsiveContainer width="100%" height={210}>
-              <BarChart data={WAREHOUSE_DATA}>
-                <CartesianGrid vertical={false} stroke="#EEEDE7" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <Bar dataKey="value" fill="#2F6FED" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="charts-row2">
-          <div className="panel">
-            <div className="panel-title">Top products by revenue</div>
-            <table>
-              <thead>
-                <tr><th>Product</th><th className="num">Units sold</th><th className="num">Revenue</th></tr>
-              </thead>
-              <tbody>
-                {TOP_PRODUCTS.map((p) => (
-                  <tr key={p.name}>
-                    <td>{p.name}</td>
-                    <td className="num">{p.units.toLocaleString()}</td>
-                    <td className="num">{p.revenue}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="panel">
-            <div className="panel-title">Customer segments</div>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie data={SEGMENTS} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2}>
-                  {SEGMENTS.map((s) => <Cell key={s.name} fill={s.color} />)}
-                </Pie>
-                <Tooltip formatter={(v) => `${v}%`} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="legend">
-              {SEGMENTS.map((s) => (
-                <div className="legend-row" key={s.name}>
-                  <span className="legend-dot" style={{ background: s.color }} />
-                  {s.name}
-                  <span className="legend-value">{Math.round((s.value / totalSegments) * 100)}%</span>
-                </div>
-              ))}
+        {loading ? (
+          <div className="empty">Loading analytics…</div>
+        ) : !data ? (
+          <div className="empty">Could not load analytics data.</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <div className="kpi-card"><div className="kpi-label">Revenue ({range.toLowerCase()})</div><div className="kpi-value">{data.kpi.revenue}</div></div>
+              <div className="kpi-card success"><div className="kpi-label">Orders ({range.toLowerCase()})</div><div className="kpi-value">{data.kpi.orders.toLocaleString()}</div></div>
+              <div className="kpi-card"><div className="kpi-label">Avg. order value</div><div className="kpi-value">{data.kpi.aov}</div></div>
+              <div className="kpi-card warning"><div className="kpi-label">Undelivered rate</div><div className="kpi-value">{data.kpi.returnRate}</div></div>
             </div>
-          </div>
-        </div>
+
+            <div className="charts-row">
+              <div className="panel">
+                <div className="panel-title">Revenue trend</div>
+                {data.revenueTrend.length === 0 ? (
+                  <div className="empty">No orders in this range yet.</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={210}>
+                    <LineChart data={data.revenueTrend}>
+                      <CartesianGrid vertical={false} stroke="#EEEDE7" />
+                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v) => `$${v.toLocaleString()}`} />
+                      <Line type="monotone" dataKey="value" stroke="#2F6FED" strokeWidth={2.5} dot={{ r: 3, fill: "#2F6FED" }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="panel">
+                <div className="panel-title">Warehouse stock levels</div>
+                {data.warehouseData.length === 0 ? (
+                  <div className="empty">No warehouse data yet.</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={210}>
+                    <BarChart data={data.warehouseData}>
+                      <CartesianGrid vertical={false} stroke="#EEEDE7" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <Bar dataKey="value" fill="#2F6FED" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            <div className="charts-row2">
+              <div className="panel">
+                <div className="panel-title">Top products by revenue</div>
+                {data.topProducts.length === 0 ? (
+                  <div className="empty">No sales in this range yet.</div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr><th>Product</th><th className="num">Units sold</th><th className="num">Revenue</th></tr>
+                    </thead>
+                    <tbody>
+                      {data.topProducts.map((p) => (
+                        <tr key={p.name}>
+                          <td>{p.name}</td>
+                          <td className="num">{p.units.toLocaleString()}</td>
+                          <td className="num">{p.revenue}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="panel">
+                <div className="panel-title">Customer segments</div>
+                {data.segments.length === 0 ? (
+                  <div className="empty">No customer order data yet.</div>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <PieChart>
+                        <Pie data={data.segments} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2}>
+                          {data.segments.map((s) => <Cell key={s.name} fill={s.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => `${v}%`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="legend">
+                      {data.segments.map((s) => (
+                        <div className="legend-row" key={s.name}>
+                          <span className="legend-dot" style={{ background: s.color }} />
+                          {s.name}
+                          <span className="legend-value">{s.value}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="app-footer">
           &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
@@ -223,6 +223,16 @@ export default function AdminAnalytics() {
         title="Export analytics"
         filePrefix="stockflow-analytics"
         includeItems={["KPI summary", "Charts & graphs", "Top products & segments table"]}
+        exportData={
+  data && {
+    kpis: data.kpi,
+    charts: {
+      "Revenue trend": { labels: data.revenueTrend.map(r => r.label), data: data.revenueTrend.map(r => r.value) },
+      "Warehouse stock levels": { labels: data.warehouseData.map(w => w.name), data: data.warehouseData.map(w => w.value) }
+    },
+    savedReports: data.topProducts.map(p => ({ name: p.name, type: "Top product", generated: p.revenue }))
+  }
+}
       />
     </DashboardLayout>
   );

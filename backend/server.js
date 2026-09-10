@@ -25,7 +25,7 @@ app.use('/api/products', protect, require('./routes/productRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
-
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)
