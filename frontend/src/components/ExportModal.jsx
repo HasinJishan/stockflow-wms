@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 const FORMATS = [
   { id: "pdf", name: "PDF", desc: "Formatted document", icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" },
@@ -39,8 +40,6 @@ const STYLES = `
   .expm-checkbox { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #D1D5DB; flex-shrink: 0; }
   .expm-checkbox.checked { background: #2F6FED; border-color: #2F6FED; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 10px; }
 
-  .expm-note { font-size: 11.5px; color: #9CA3AF; margin-top: 10px; line-height: 1.5; }
-
   .expm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
   .expm-btn-primary { height: 38px; padding: 0 18px; background: #2F6FED; color: #FFFFFF; border: none; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .expm-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -61,8 +60,7 @@ const STYLES = `
   .expm-done { color: #1F9D55; }
 `;
 
-// PDF exports as a real formatted PDF. XLSX currently falls back to CSV (opens fine in Excel).
-const FILE_EXT = { pdf: "pdf", xlsx: "csv", csv: "csv" };
+const FILE_EXT = { pdf: "pdf", xlsx: "xlsx", csv: "csv" };
 
 function Icon({ d, ...p }) {
   return (
@@ -72,36 +70,34 @@ function Icon({ d, ...p }) {
   );
 }
 
-// Converts export data into CSV text
-function buildCsv(exportData, checks) {
-  const lines = [];
+// Builds a simple array of {sheetName, rows} sections shared by CSV and XLSX exporters
+function buildSections(exportData, checks) {
+  const sections = [];
 
   if (checks["KPI summary"] && exportData?.kpis) {
-    lines.push("KPI Summary");
-    Object.entries(exportData.kpis).forEach(([key, value]) => {
-      lines.push(`${key},${value}`);
+    sections.push({
+      name: "KPI Summary",
+      rows: [["Metric", "Value"], ...Object.entries(exportData.kpis).map(([k, v]) => [k, String(v)])],
     });
-    lines.push("");
   }
 
   if (checks["Charts & graphs"] && exportData?.charts) {
     Object.entries(exportData.charts).forEach(([chartName, chart]) => {
-      lines.push(chartName);
-      lines.push(chart.labels.join(","));
-      lines.push(chart.data.join(","));
-      lines.push("");
+      sections.push({
+        name: chartName.slice(0, 31), // Excel sheet names max 31 chars
+        rows: [chart.labels, chart.data.map(String)],
+      });
     });
   }
 
   if (checks["Saved reports table"] && exportData?.savedReports) {
-    lines.push("Saved Reports");
-    lines.push("Name,Type,Generated");
-    exportData.savedReports.forEach((r) => {
-      lines.push(`${r.name},${r.type},${r.generated}`);
+    sections.push({
+      name: "Saved Reports",
+      rows: [["Name", "Type", "Generated"], ...exportData.savedReports.map((r) => [r.name, r.type, r.generated])],
     });
   }
 
-  return lines.join("\n");
+  return sections;
 }
 
 /**
@@ -148,16 +144,28 @@ export default function ExportModal({
   const fileName = `${filePrefix}-${monthStamp}.${FILE_EXT[format]}`;
 
   const generateCsv = () => {
-    const csvContent = buildCsv(exportData, checks);
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const sections = buildSections(exportData, checks);
+    const lines = [];
+    sections.forEach((s) => {
+      lines.push(s.name);
+      s.rows.forEach((row) => lines.push(row.join(",")));
+      lines.push("");
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    downloadBlob(blob);
+  };
+
+  const generateXlsx = () => {
+    const sections = buildSections(exportData, checks);
+    const workbook = XLSX.utils.book_new();
+    sections.forEach((s) => {
+      const sheet = XLSX.utils.aoa_to_sheet(s.rows);
+      XLSX.utils.book_append_sheet(workbook, sheet, s.name || "Sheet");
+    });
+    if (sections.length === 0) {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["No data selected"]]), "Data");
+    }
+    XLSX.writeFile(workbook, fileName);
   };
 
   const generatePdf = () => {
@@ -177,69 +185,44 @@ export default function ExportModal({
     y += 12;
     doc.setTextColor(0);
 
-    if (checks["KPI summary"] && exportData?.kpis) {
+    const sections = buildSections(exportData, checks);
+    sections.forEach((s) => {
+      if (y > 250) {
+        doc.addPage();
+        y = 20;
+      }
       doc.setFontSize(13);
-      doc.text("KPI Summary", 14, y);
+      doc.text(s.name, 14, y);
       y += 4;
-      doc.autoTable({
+      autoTable(doc, {
         startY: y,
-        head: [["Metric", "Value"]],
-        body: Object.entries(exportData.kpis).map(([k, v]) => [k, String(v)]),
+        head: [s.rows[0]],
+        body: s.rows.slice(1),
         theme: "grid",
         headStyles: { fillColor: [47, 111, 237] },
         margin: { left: 14, right: 14 },
       });
       y = doc.lastAutoTable.finalY + 12;
-    }
-
-    if (checks["Charts & graphs"] && exportData?.charts) {
-      Object.entries(exportData.charts).forEach(([chartName, chart]) => {
-        if (y > 250) {
-          doc.addPage();
-          y = 20;
-        }
-        doc.setFontSize(13);
-        doc.text(chartName, 14, y);
-        y += 4;
-        doc.autoTable({
-          startY: y,
-          head: [chart.labels],
-          body: [chart.data.map(String)],
-          theme: "grid",
-          headStyles: { fillColor: [92, 144, 242] },
-          margin: { left: 14, right: 14 },
-        });
-        y = doc.lastAutoTable.finalY + 12;
-      });
-    }
-
-    if (checks["Saved reports table"] && exportData?.savedReports) {
-      if (y > 240) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.setFontSize(13);
-      doc.text("Top Products / Saved Reports", 14, y);
-      y += 4;
-      doc.autoTable({
-        startY: y,
-        head: [["Name", "Type", "Generated / Revenue"]],
-        body: exportData.savedReports.map((r) => [r.name, r.type, r.generated]),
-        theme: "grid",
-        headStyles: { fillColor: [169, 203, 250] },
-        margin: { left: 14, right: 14 },
-      });
-    }
+    });
 
     doc.save(fileName);
   };
 
+  const downloadBlob = (blob) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const triggerDownload = () => {
-    if (format === "pdf") {
-      generatePdf();
-    } else {
-      generateCsv();
-    }
+    if (format === "pdf") generatePdf();
+    else if (format === "xlsx") generateXlsx();
+    else generateCsv();
   };
 
   const startExport = () => {
@@ -316,12 +299,6 @@ export default function ExportModal({
               {item}
             </div>
           ))}
-
-          {format === "xlsx" && (
-            <div className="expm-note">
-              Excel exports currently download as CSV (opens fine in Excel/Sheets). Native XLSX formatting is coming soon.
-            </div>
-          )}
 
           <div className="expm-actions">
             <button className="expm-btn-outline" onClick={onClose}>Cancel</button>
