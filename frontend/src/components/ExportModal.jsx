@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 const FORMATS = [
   { id: "pdf", name: "PDF", desc: "Formatted document", icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" },
@@ -59,9 +61,8 @@ const STYLES = `
   .expm-done { color: #1F9D55; }
 `;
 
-// All formats currently export as real CSV data (works in Excel/Sheets).
-// True PDF/XLSX formatting can be added later without changing this component's API.
-const FILE_EXT = { pdf: "csv", xlsx: "csv", csv: "csv" };
+// PDF exports as a real formatted PDF. XLSX currently falls back to CSV (opens fine in Excel).
+const FILE_EXT = { pdf: "pdf", xlsx: "csv", csv: "csv" };
 
 function Icon({ d, ...p }) {
   return (
@@ -71,7 +72,7 @@ function Icon({ d, ...p }) {
   );
 }
 
-// Converts an array of {label, value} rows (and optional table sections) into CSV text
+// Converts export data into CSV text
 function buildCsv(exportData, checks) {
   const lines = [];
 
@@ -107,14 +108,13 @@ function buildCsv(exportData, checks) {
  * Reusable export modal used by Reports and Analytics pages.
  *
  * Props:
- * - open: bool - whether the modal is shown
- * - onClose: () => void - called when the modal should close
- * - title: string - e.g. "Export report" / "Export analytics"
- * - subtitle: string - defaults to "Choose a format and what to include."
- * - includeItems: string[] - checkbox labels, e.g. ["KPI summary", "Charts & graphs", "Saved reports table"]
- * - filePrefix: string - used to build the real filename, e.g. "stockflow-report"
+ * - open: bool
+ * - onClose: () => void
+ * - title: string
+ * - subtitle: string
+ * - includeItems: string[]
+ * - filePrefix: string
  * - exportData: { kpis?: object, charts?: { [name]: { labels: string[], data: number[] } }, savedReports?: array }
- *     The real data to export. Required for a real download to happen.
  */
 export default function ExportModal({
   open,
@@ -125,7 +125,7 @@ export default function ExportModal({
   filePrefix = "stockflow-export",
   exportData = null,
 }) {
-  const [format, setFormat] = useState("csv");
+  const [format, setFormat] = useState("pdf");
   const [dateRange, setDateRange] = useState(DATE_RANGES[0]);
   const [checks, setChecks] = useState(() => Object.fromEntries(includeItems.map((i) => [i, true])));
   const [phase, setPhase] = useState("form"); // 'form' | 'loading' | 'done'
@@ -147,7 +147,7 @@ export default function ExportModal({
   const monthStamp = new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" }).replace(" ", "").toLowerCase();
   const fileName = `${filePrefix}-${monthStamp}.${FILE_EXT[format]}`;
 
-  const triggerDownload = () => {
+  const generateCsv = () => {
     const csvContent = buildCsv(exportData, checks);
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -158,6 +158,88 @@ export default function ExportModal({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const generatePdf = () => {
+    const doc = new jsPDF();
+    let y = 20;
+
+    doc.setFontSize(18);
+    doc.text(title, 14, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(
+      `Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} · ${dateRange}`,
+      14,
+      y
+    );
+    y += 12;
+    doc.setTextColor(0);
+
+    if (checks["KPI summary"] && exportData?.kpis) {
+      doc.setFontSize(13);
+      doc.text("KPI Summary", 14, y);
+      y += 4;
+      doc.autoTable({
+        startY: y,
+        head: [["Metric", "Value"]],
+        body: Object.entries(exportData.kpis).map(([k, v]) => [k, String(v)]),
+        theme: "grid",
+        headStyles: { fillColor: [47, 111, 237] },
+        margin: { left: 14, right: 14 },
+      });
+      y = doc.lastAutoTable.finalY + 12;
+    }
+
+    if (checks["Charts & graphs"] && exportData?.charts) {
+      Object.entries(exportData.charts).forEach(([chartName, chart]) => {
+        if (y > 250) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.setFontSize(13);
+        doc.text(chartName, 14, y);
+        y += 4;
+        doc.autoTable({
+          startY: y,
+          head: [chart.labels],
+          body: [chart.data.map(String)],
+          theme: "grid",
+          headStyles: { fillColor: [92, 144, 242] },
+          margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 12;
+      });
+    }
+
+    if (checks["Saved reports table"] && exportData?.savedReports) {
+      if (y > 240) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFontSize(13);
+      doc.text("Top Products / Saved Reports", 14, y);
+      y += 4;
+      doc.autoTable({
+        startY: y,
+        head: [["Name", "Type", "Generated / Revenue"]],
+        body: exportData.savedReports.map((r) => [r.name, r.type, r.generated]),
+        theme: "grid",
+        headStyles: { fillColor: [169, 203, 250] },
+        margin: { left: 14, right: 14 },
+      });
+    }
+
+    doc.save(fileName);
+  };
+
+  const triggerDownload = () => {
+    if (format === "pdf") {
+      generatePdf();
+    } else {
+      generateCsv();
+    }
   };
 
   const startExport = () => {
@@ -235,9 +317,9 @@ export default function ExportModal({
             </div>
           ))}
 
-          {format !== "csv" && (
+          {format === "xlsx" && (
             <div className="expm-note">
-              Exports currently download as real CSV data (opens in Excel/Sheets). Formatted PDF/XLSX styling is coming soon.
+              Excel exports currently download as CSV (opens fine in Excel/Sheets). Native XLSX formatting is coming soon.
             </div>
           )}
 
