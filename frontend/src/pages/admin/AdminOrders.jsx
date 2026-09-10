@@ -81,13 +81,6 @@ const SearchIcon = () => (
   </svg>
 );
 
-const ExportIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-);
-
 export default function AdminOrders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -149,9 +142,6 @@ export default function AdminOrders() {
       actions={
         <div className="ord" style={{ display: "inline-block" }}>
           <div className="top-actions">
-            <button className="topbar-btn-outline" onClick={() => alert("Wire this up to your export/API logic")}>
-              <ExportIcon /> <span className="btn-label">Export</span>
-            </button>
             <Link to="/admin/orders/create" className="btn-create">
               + Create order
             </Link>
