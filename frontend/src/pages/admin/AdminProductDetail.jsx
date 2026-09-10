@@ -57,6 +57,8 @@ export default function AdminProductDetail() {
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -71,6 +73,36 @@ export default function AdminProductDetail() {
     };
     fetchProduct();
   }, [id]);
+
+  // Pull real orders that contain this product, instead of a static
+  // "No orders found" placeholder.
+  useEffect(() => {
+    const fetchRecentOrders = async () => {
+      try {
+        const token = localStorage.getItem("sf_token");
+        const res = await axios.get(`https://stockflow-wms-backend.onrender.com/api/orders`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const matching = res.data
+          .filter((o) =>
+            o.items?.some(
+              (item) =>
+                item.product === id ||
+                item.product?._id === id ||
+                (product && item.sku === product.sku)
+            )
+          )
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 5);
+        setRecentOrders(matching);
+      } catch (err) {
+        console.error("Failed to fetch recent orders:", err);
+      } finally {
+        setOrdersLoading(false);
+      }
+    };
+    if (product) fetchRecentOrders();
+  }, [id, product]);
 
   if (loading) return <DashboardLayout title="Loading..."><div>Please wait...</div></DashboardLayout>;
   if (!product) return <DashboardLayout title="Error"><div>Product Not Found</div></DashboardLayout>;
@@ -88,6 +120,7 @@ export default function AdminProductDetail() {
           <aside>
             <div className="pd-card">
               <div className="pd-image-box">
+                {/* 2. Priority logic: If DB has a URL, use it. If not, use the imported local image */}
                 <img 
                     src={getProductImage(product)} 
                     alt={product.name} 
@@ -138,9 +171,41 @@ export default function AdminProductDetail() {
 
             <div className="pd-card">
               <h3 className="pd-card-title">Recent orders</h3>
-              <div style={{ textAlign: 'center', padding: '20px', color: '#9CA3AF', fontSize: '13px' }}>
-                 No orders found for this SKU yet.
-              </div>
+              {ordersLoading ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#9CA3AF', fontSize: '13px' }}>
+                  Loading orders...
+                </div>
+              ) : recentOrders.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#9CA3AF', fontSize: '13px' }}>
+                  No orders found for this SKU yet.
+                </div>
+              ) : (
+                <table className="pd-table">
+                  <thead><tr><th>Order</th><th>Customer</th><th>Qty</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {recentOrders.map((o) => {
+                      const matchedItem = o.items.find(
+                        (item) =>
+                          item.product === id ||
+                          item.product?._id === id ||
+                          (product && item.sku === product.sku)
+                      );
+                      return (
+                        <tr
+                          key={o._id}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => navigate(`/admin/orders/${o.orderNumber}`)}
+                        >
+                          <td style={{ color: "#2563EB", fontWeight: 600 }}>#{o.orderNumber}</td>
+                          <td>{o.customer?.fullName || "Unknown"}</td>
+                          <td>{matchedItem?.qty ?? "-"}</td>
+                          <td>{o.status}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </main>
         </div>
