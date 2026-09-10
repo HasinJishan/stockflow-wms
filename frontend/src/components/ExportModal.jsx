@@ -37,6 +37,8 @@ const STYLES = `
   .expm-checkbox { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #D1D5DB; flex-shrink: 0; }
   .expm-checkbox.checked { background: #2F6FED; border-color: #2F6FED; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 10px; }
 
+  .expm-note { font-size: 11.5px; color: #9CA3AF; margin-top: 10px; line-height: 1.5; }
+
   .expm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
   .expm-btn-primary { height: 38px; padding: 0 18px; background: #2F6FED; color: #FFFFFF; border: none; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .expm-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -57,7 +59,9 @@ const STYLES = `
   .expm-done { color: #1F9D55; }
 `;
 
-const FILE_EXT = { pdf: "pdf", xlsx: "xlsx", csv: "csv" };
+// All formats currently export as real CSV data (works in Excel/Sheets).
+// True PDF/XLSX formatting can be added later without changing this component's API.
+const FILE_EXT = { pdf: "csv", xlsx: "csv", csv: "csv" };
 
 function Icon({ d, ...p }) {
   return (
@@ -65,6 +69,38 @@ function Icon({ d, ...p }) {
       <path d={d} />
     </svg>
   );
+}
+
+// Converts an array of {label, value} rows (and optional table sections) into CSV text
+function buildCsv(exportData, checks) {
+  const lines = [];
+
+  if (checks["KPI summary"] && exportData?.kpis) {
+    lines.push("KPI Summary");
+    Object.entries(exportData.kpis).forEach(([key, value]) => {
+      lines.push(`${key},${value}`);
+    });
+    lines.push("");
+  }
+
+  if (checks["Charts & graphs"] && exportData?.charts) {
+    Object.entries(exportData.charts).forEach(([chartName, chart]) => {
+      lines.push(chartName);
+      lines.push(chart.labels.join(","));
+      lines.push(chart.data.join(","));
+      lines.push("");
+    });
+  }
+
+  if (checks["Saved reports table"] && exportData?.savedReports) {
+    lines.push("Saved Reports");
+    lines.push("Name,Type,Generated");
+    exportData.savedReports.forEach((r) => {
+      lines.push(`${r.name},${r.type},${r.generated}`);
+    });
+  }
+
+  return lines.join("\n");
 }
 
 /**
@@ -76,7 +112,9 @@ function Icon({ d, ...p }) {
  * - title: string - e.g. "Export report" / "Export analytics"
  * - subtitle: string - defaults to "Choose a format and what to include."
  * - includeItems: string[] - checkbox labels, e.g. ["KPI summary", "Charts & graphs", "Saved reports table"]
- * - filePrefix: string - used to build the fake filename shown while "preparing", e.g. "stockflow-report"
+ * - filePrefix: string - used to build the real filename, e.g. "stockflow-report"
+ * - exportData: { kpis?: object, charts?: { [name]: { labels: string[], data: number[] } }, savedReports?: array }
+ *     The real data to export. Required for a real download to happen.
  */
 export default function ExportModal({
   open,
@@ -85,8 +123,9 @@ export default function ExportModal({
   subtitle = "Choose a format and what to include.",
   includeItems = ["KPI summary", "Charts & graphs"],
   filePrefix = "stockflow-export",
+  exportData = null,
 }) {
-  const [format, setFormat] = useState("pdf");
+  const [format, setFormat] = useState("csv");
   const [dateRange, setDateRange] = useState(DATE_RANGES[0]);
   const [checks, setChecks] = useState(() => Object.fromEntries(includeItems.map((i) => [i, true])));
   const [phase, setPhase] = useState("form"); // 'form' | 'loading' | 'done'
@@ -108,7 +147,24 @@ export default function ExportModal({
   const monthStamp = new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" }).replace(" ", "").toLowerCase();
   const fileName = `${filePrefix}-${monthStamp}.${FILE_EXT[format]}`;
 
+  const triggerDownload = () => {
+    const csvContent = buildCsv(exportData, checks);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const startExport = () => {
+    if (!exportData) {
+      alert("No report data available to export yet.");
+      return;
+    }
     setPhase("loading");
     setProgress(0);
     intervalRef.current = setInterval(() => {
@@ -116,9 +172,8 @@ export default function ExportModal({
         const next = p + Math.random() * 18 + 8;
         if (next >= 100) {
           clearInterval(intervalRef.current);
+          triggerDownload();
           setPhase("done");
-          // Replace with your real export/download trigger, e.g.:
-          // window.location.href = `/api/export?format=${format}&range=${dateRange}`;
           setTimeout(() => onClose(), 900);
           return 100;
         }
@@ -179,6 +234,12 @@ export default function ExportModal({
               {item}
             </div>
           ))}
+
+          {format !== "csv" && (
+            <div className="expm-note">
+              Exports currently download as real CSV data (opens in Excel/Sheets). Formatted PDF/XLSX styling is coming soon.
+            </div>
+          )}
 
           <div className="expm-actions">
             <button className="expm-btn-outline" onClick={onClose}>Cancel</button>

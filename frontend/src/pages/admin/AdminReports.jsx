@@ -190,12 +190,22 @@ export default function AdminReports() {
       </div>
 
       <ExportModal
-        open={exportOpen}
-        onClose={() => setExportOpen(false)}
-        title="Export report"
-        filePrefix="stockflow-report"
-        includeItems={["KPI summary", "Charts & graphs"]}
-      />
+  open={exportOpen}
+  onClose={() => setExportOpen(false)}
+  title="Export report"
+  filePrefix="stockflow-report"
+  includeItems={["KPI summary", "Charts & graphs"]}
+  exportData={
+    data && {
+      kpis: data.kpis,
+      charts: {
+        "Orders placed (last 6 months)": data.fulfillmentChart,
+        "Inventory by category": data.categoryChart,
+        "Warehouse stock comparison": data.warehouseChart
+      }
+    }
+  }
+/>
     </DashboardLayout>
   );
 }
