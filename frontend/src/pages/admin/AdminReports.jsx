@@ -1,14 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import Chart from "chart.js/auto";
 import DashboardLayout from "../../components/DashboardLayout";
 import ExportModal from "../../components/ExportModal";
-
-const SAVED_REPORTS = [
-  { name: "Q2 stock turnover summary", type: "Inventory", generated: "Jul 1, 2026" },
-  { name: "June order fulfillment audit", type: "Orders", generated: "Jul 3, 2026" },
-  { name: "Low stock frequency report", type: "Inventory", generated: "Jul 15, 2026" },
-  { name: "Warehouse comparison Q2", type: "Operations", generated: "Jul 20, 2026" },
-];
 
 const STYLES = `
   .rep * { box-sizing: border-box; }
@@ -36,8 +30,7 @@ const STYLES = `
   .rep td { padding: 12px 10px; border-bottom: 1px solid #F1F0EA; }
   .rep tr:last-child td { border-bottom: none; }
 
-  .rep .badge { font-size: 12px; padding: 4px 12px; border-radius: 8px; font-weight: 600; display: inline-block; }
-  .rep .badge.blue { background: #DCE9FD; color: #2F6FED; cursor: pointer; border: none; font-family: inherit; }
+  .rep .empty { text-align: center; padding: 20px; color: #9CA3AF; font-size: 13px; }
 
   .rep .app-footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12px; color: #9CA3AF; text-align: center; }
   .rep .app-footer a { color: #9CA3AF; text-decoration: none; }
@@ -58,80 +51,92 @@ const ExportIcon = () => (
   </svg>
 );
 
-/**
- * Small hook: creates a Chart.js chart on the given canvas ref and destroys it
- * on unmount / re-render, so charts don't duplicate under React StrictMode.
- */
-function useChart(canvasRef, config) {
+function useChart(canvasRef, config, deps) {
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !config) return;
     const chart = new Chart(canvasRef.current, config);
     return () => chart.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, deps);
 }
 
 export default function AdminReports() {
   const fulfillRef = useRef(null);
   const categoryRef = useRef(null);
   const warehouseCompareRef = useRef(null);
-  const fulfillTimeRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  useChart(fulfillRef, {
-    type: "line",
-    data: {
-      labels: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
-      datasets: [{ data: [720, 810, 790, 860, 910, 960], borderColor: "#2F6FED", backgroundColor: "rgba(47,111,237,0.1)", fill: true, tension: 0.35 }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { grid: { color: "#EEEDE7" } }, x: { grid: { display: false } } },
-    },
-  });
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/reports/summary', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setData(res.data);
+      } catch (err) {
+        console.error("Failed to fetch reports:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReports();
+  }, []);
 
-  useChart(categoryRef, {
-    type: "doughnut",
-    data: {
-      labels: ["Packaging", "Electronics", "Apparel", "Other"],
-      datasets: [{ data: [38, 24, 22, 16], backgroundColor: ["#2F6FED", "#5C90F2", "#A9CBFA", "#DCE9FD"] }],
+  useChart(
+    fulfillRef,
+    data && {
+      type: "line",
+      data: {
+        labels: data.fulfillmentChart.labels,
+        datasets: [{ data: data.fulfillmentChart.data, borderColor: "#2F6FED", backgroundColor: "rgba(47,111,237,0.1)", fill: true, tension: 0.35 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { grid: { color: "#EEEDE7" } }, x: { grid: { display: false } } },
+      },
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } } },
-    },
-  });
+    [data]
+  );
 
-  useChart(warehouseCompareRef, {
-    type: "bar",
-    data: {
-      labels: ["Coimbatore", "Chennai", "Bengaluru"],
-      datasets: [{ data: [612, 318, 64], backgroundColor: "#2F6FED", borderRadius: 4, maxBarThickness: 36 }],
+  useChart(
+    categoryRef,
+    data && {
+      type: "doughnut",
+      data: {
+        labels: data.categoryChart.labels,
+        datasets: [{ data: data.categoryChart.data, backgroundColor: ["#2F6FED", "#5C90F2", "#A9CBFA", "#DCE9FD", "#B8C4D9"] }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } } },
+      },
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: "#EEEDE7" } }, x: { grid: { display: false } } },
-    },
-  });
+    [data]
+  );
 
-  useChart(fulfillTimeRef, {
-    type: "line",
-    data: {
-      labels: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
-      datasets: [{ data: [5.2, 4.9, 4.6, 4.5, 4.3, 4.2], borderColor: "#E8A93A", backgroundColor: "rgba(232,169,58,0.12)", fill: true, tension: 0.35 }],
+  useChart(
+    warehouseCompareRef,
+    data && {
+      type: "bar",
+      data: {
+        labels: data.warehouseChart.labels,
+        datasets: [{ data: data.warehouseChart.data, backgroundColor: "#2F6FED", borderRadius: 4, maxBarThickness: 36 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, grid: { color: "#EEEDE7" } }, x: { grid: { display: false } } },
+      },
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { grid: { color: "#EEEDE7" } }, x: { grid: { display: false } } },
-    },
-  });
+    [data]
+  );
 
   return (
     <DashboardLayout
@@ -146,57 +151,38 @@ export default function AdminReports() {
       <div className="rep">
         <style>{STYLES}</style>
 
-        <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Stock turnover rate</div><div className="kpi-value">6.4x</div></div>
-          <div className="kpi-card"><div className="kpi-label">Avg. fulfillment time</div><div className="kpi-value">4.2 hrs</div></div>
-          <div className="kpi-card success"><div className="kpi-label">Order accuracy</div><div className="kpi-value">98.7%</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Stockout incidents</div><div className="kpi-value">7</div></div>
-        </div>
+        {loading ? (
+          <div className="empty">Loading reports…</div>
+        ) : !data ? (
+          <div className="empty">Could not load report data.</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <div className="kpi-card"><div className="kpi-label">Total orders</div><div className="kpi-value">{data.kpis.totalOrders}</div></div>
+              <div className="kpi-card"><div className="kpi-label">Delivered orders</div><div className="kpi-value">{data.kpis.deliveredOrders}</div></div>
+              <div className="kpi-card success"><div className="kpi-label">Order completion rate</div><div className="kpi-value">{data.kpis.orderAccuracy}</div></div>
+              <div className="kpi-card warning"><div className="kpi-label">Stockout products</div><div className="kpi-value">{data.kpis.stockoutCount}</div></div>
+            </div>
 
-        <div className="panels-row">
-          <div className="panel">
-            <div className="panel-title">Orders fulfilled (last 6 months)</div>
-            <div className="chart-box"><canvas ref={fulfillRef} /></div>
-          </div>
-          <div className="panel">
-            <div className="panel-title">Inventory by category</div>
-            <div className="chart-box"><canvas ref={categoryRef} /></div>
-          </div>
-        </div>
+            <div className="panels-row">
+              <div className="panel">
+                <div className="panel-title">Orders placed (last 6 months)</div>
+                <div className="chart-box"><canvas ref={fulfillRef} /></div>
+              </div>
+              <div className="panel">
+                <div className="panel-title">Inventory by category</div>
+                <div className="chart-box"><canvas ref={categoryRef} /></div>
+              </div>
+            </div>
 
-        <div className="panels-row">
-          <div className="panel">
-            <div className="panel-title">Warehouse comparison &mdash; orders fulfilled</div>
-            <div className="chart-box short"><canvas ref={warehouseCompareRef} /></div>
-          </div>
-          <div className="panel">
-            <div className="panel-title">Fulfillment time trend (days)</div>
-            <div className="chart-box short"><canvas ref={fulfillTimeRef} /></div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Saved reports</div>
-          <table>
-            <thead>
-              <tr><th>Report</th><th>Type</th><th>Generated</th><th></th></tr>
-            </thead>
-            <tbody>
-              {SAVED_REPORTS.map((r) => (
-                <tr key={r.name}>
-                  <td>{r.name}</td>
-                  <td>{r.type}</td>
-                  <td>{r.generated}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <button className="badge blue" onClick={() => alert(`Wire this up to download "${r.name}"`)}>
-                      Download
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            <div className="panels-row">
+              <div className="panel">
+                <div className="panel-title">Warehouse stock comparison</div>
+                <div className="chart-box short"><canvas ref={warehouseCompareRef} /></div>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="app-footer">
           &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
@@ -208,7 +194,7 @@ export default function AdminReports() {
         onClose={() => setExportOpen(false)}
         title="Export report"
         filePrefix="stockflow-report"
-        includeItems={["KPI summary", "Charts & graphs", "Saved reports table"]}
+        includeItems={["KPI summary", "Charts & graphs"]}
       />
     </DashboardLayout>
   );
