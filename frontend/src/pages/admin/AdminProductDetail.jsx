@@ -3,8 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-// 1. Import the local image from your assets folder
-import defaultScannerImg from "../../assets/Laser Handheld Barcode Scanner.jpg";
+// Smart image matching: picks the right local asset photo based on the
+// product's name/category instead of always showing the barcode scanner.
+import { getProductImage } from "../../assets/productImages";
 
 const STYLES = `
   .pd-container { font-family: 'Inter', sans-serif; color: #111827; }
@@ -87,9 +88,8 @@ export default function AdminProductDetail() {
           <aside>
             <div className="pd-card">
               <div className="pd-image-box">
-                {/* 2. Priority logic: If DB has a URL, use it. If not, use the imported local image */}
                 <img 
-                    src={product.imageUrl || defaultScannerImg} 
+                    src={getProductImage(product)} 
                     alt={product.name} 
                 />
               </div>
