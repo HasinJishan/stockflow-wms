@@ -52,6 +52,13 @@ const STYLES = `
   .pd-btn-edit { background: #2563EB; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; }
 `;
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
 export default function AdminProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -129,7 +136,7 @@ export default function AdminProductDetail() {
               <div className="pd-row"><span className="pd-label">Status</span><span className="pd-badge status-low">{product.status}</span></div>
               <div className="pd-row"><span className="pd-label">Category</span><span className="pd-val">{product.category}</span></div>
               <div className="pd-row"><span className="pd-label">Unit</span><span className="pd-val">{product.unit || "Each"}</span></div>
-              <div className="pd-row"><span className="pd-label">Added</span><span className="pd-val">Mar 3, 2026</span></div>
+              <div className="pd-row"><span className="pd-label">Added</span><span className="pd-val">{formatDate(product.createdAt)}</span></div>
             </div>
 
             <div className="pd-card">
@@ -164,7 +171,7 @@ export default function AdminProductDetail() {
               <table className="pd-table">
                 <thead><tr><th>Date</th><th>Type</th><th>Change</th><th>By</th></tr></thead>
                 <tbody>
-                   <tr><td>Aug 31, 2026</td><td>System Entry</td><td className="text-green">+{product.quantity}</td><td>Admin</td></tr>
+                   <tr><td>{formatDate(product.createdAt)}</td><td>System Entry</td><td className="text-green">+{product.quantity}</td><td>Admin</td></tr>
                 </tbody>
               </table>
             </div>
