@@ -23,6 +23,9 @@ import safetyBoots from "./Steel-Toe Leather Safety Boots.jpg";
 import labelPrinter from "./Thermal Label Printer.jpg";
 import chargingDock from "./Universal Charging Station Dock.jpg";
 import polyMailers from "./White Padded Poly Mailers.jpg";
+import cottonGloves from "./Cotton Work Gloves (Pair).jpg";
+import usbHub from "./USB-C Hub 7-in-1.jpg";
+import woodenPallet from "./Wooden Pallet Standard.jpg";
 
 // Order matters: more specific keyword sets should come first so they don't
 // get shadowed by a broader match (e.g. "tape" appearing in two entries).
@@ -32,12 +35,15 @@ const IMAGE_RULES = [
   { image: packingTape, keywords: ["packing tape", "strapping tape", "sealing tape", "tape"] },
   { image: polyMailers, keywords: ["poly mailer", "mailer", "mailing bag"] },
   { image: warehouseDolly, keywords: ["dolly", "hand truck", "pallet jack"] },
+  { image: woodenPallet, keywords: ["wooden pallet", "pallet"] },
   { image: steelShelving, keywords: ["shelving", "shelf", "rack"] },
   { image: safetyVest, keywords: ["safety vest", "hi-vis", "hi vis", "reflective vest", "vest"] },
   { image: safetyBoots, keywords: ["safety boot", "steel-toe", "steel toe", "boots"] },
+  { image: cottonGloves, keywords: ["work glove", "cotton glove", "glove"] },
   { image: firstAidKit, keywords: ["first aid"] },
   { image: labelPrinter, keywords: ["label printer", "thermal label", "thermal printer"] },
   { image: chargingDock, keywords: ["charging station", "charging dock", "charger dock"] },
+  { image: usbHub, keywords: ["usb-c hub", "usb c hub", "usb hub"] },
   { image: barcodeScanner, keywords: ["barcode", "scanner"] },
 ];
 
