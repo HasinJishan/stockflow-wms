@@ -117,3 +117,59 @@ exports.getAnalytics = async (req, res) => {
         res.status(500).json({ message: "Server Error", error: error.message });
     }
 };
+
+// Admin/Staff dashboard summary - powers AdminDashboard.jsx
+exports.getAdminDashboard = async (req, res) => {
+    try {
+        const totalProducts = await Product.countDocuments();
+        const lowStockItems = await Product.find({ $expr: { $lte: ["$quantity", "$reorderLevel"] } })
+            .select('name quantity reorderLevel')
+            .limit(6);
+        const lowStockCount = await Product.countDocuments({ $expr: { $lte: ["$quantity", "$reorderLevel"] } });
+        const totalUsers = await User.countDocuments();
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const ordersToday = await Order.countDocuments({ createdAt: { $gte: startOfToday } });
+
+        // Orders this week (last 7 days, grouped by day)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+        const weekOrders = await Order.find({ createdAt: { $gte: sevenDaysAgo } });
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const weekData = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dayStr = d.toDateString();
+            const count = weekOrders.filter(o => new Date(o.createdAt).toDateString() === dayStr).length;
+            weekData.push({ day: dayNames[d.getDay()], orders: count });
+        }
+
+        const recentOrders = await Order.find()
+            .populate('customer', 'fullName')
+            .sort({ createdAt: -1 })
+            .limit(5);
+
+        res.status(200).json({
+            kpis: { totalProducts, ordersToday, lowStockCount, totalUsers },
+            weekData,
+            lowStockItems: lowStockItems.map(p => ({
+                name: p.name,
+                qty: `${p.quantity} left`,
+                level: p.quantity <= 0 ? "danger" : p.quantity <= p.reorderLevel / 2 ? "danger" : "warning"
+            })),
+            recentOrders: recentOrders.map(o => ({
+                id: `#${o.orderNumber}`,
+                customer: o.customer?.fullName || "Unknown",
+                items: o.items.length,
+                total: `$${o.total.toFixed(2)}`,
+                date: new Date(o.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                status: o.status
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
