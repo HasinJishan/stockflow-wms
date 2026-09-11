@@ -7,7 +7,7 @@ const sendEmail = require('../utils/sendEmail'); // Ensure this utility exists
 // 1. REGISTER (Professional: Force role + Send Verification)
 exports.register = async (req, res) => {
     try {
-        const { fullName, email, password } = req.body;
+        const { fullName, email, password, role } = req.body;
 
         const userExists = await User.findOne({ email });
         if (userExists) return res.status(400).json({ message: "User already exists" });
@@ -18,11 +18,15 @@ exports.register = async (req, res) => {
         // Professional: Create verification token
         const vToken = crypto.randomBytes(32).toString('hex');
 
+        // Allow public signup to choose staff or customer, but never admin (security)
+        const allowedPublicRoles = ['staff', 'customer'];
+        const finalRole = allowedPublicRoles.includes(role) ? role : 'customer';
+
         const user = await User.create({ 
             fullName, 
             email, 
             password: hashedPassword, 
-            role: 'customer', // Force 'customer' for safety
+            role: finalRole,
             verificationToken: vToken 
         });
 
@@ -36,7 +40,6 @@ exports.register = async (req, res) => {
             });
         } catch (emailError) {
             console.error("⚠️ Verification email failed to send:", emailError.message);
-            // Registration still succeeds even if email fails
         }
 
         res.status(201).json({ message: "Registered! Please check your email to verify your account." });
