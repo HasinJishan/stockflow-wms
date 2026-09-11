@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 
@@ -83,6 +84,7 @@ const STYLES = `
   .st .badge.clickable { cursor: pointer; }
 
   .st .btn-primary { height: 40px; padding: 0 18px; background: #2F6FED; color: #FFFFFF; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-family: inherit; }
+  .st .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
   .st .btn-outline { height: 40px; padding: 0 16px; background: #FFFFFF; color: #111827; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-family: inherit; white-space: nowrap; }
   .st .btn-outline svg, .st .btn-primary svg { width: 16px; height: 16px; }
   .st .btn-danger { height: 38px; padding: 0 16px; background: #FFFFFF; color: #A32D2D; border: 1px solid #E8A9A9; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit; }
@@ -99,6 +101,8 @@ const STYLES = `
   .st .profile-avatar { width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; background: #DCE9FD; color: #2F6FED; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; }
   .st .profile-name { font-size: 16px; font-weight: 600; }
   .st .profile-role { font-size: 13px; color: #6B7280; margin-top: 2px; }
+  .st .profile-edit-input { height: 34px; font-size: 14px; padding: 0 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; display: block; width: 220px; max-width: 100%; }
+  .st .profile-edit-error { color: #DC2626; font-size: 12px; margin-top: 4px; }
 
   .st .usage-block { margin-bottom: 16px; }
   .st .usage-block:last-child { margin-bottom: 0; }
@@ -168,7 +172,11 @@ function Toggle({ on, onClick }) {
 }
 
 function GeneralTab({ user }) {
-  const navigate = useNavigate();
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ fullName: user?.name || "", email: user?.email || "" });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
   const [company, setCompany] = useState({
     name: "StockFlow Logistics Pvt. Ltd.",
     email: "ops@stockflow.com",
@@ -180,17 +188,68 @@ function GeneralTab({ user }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const handleSaveProfile = async () => {
+    setProfileError("");
+    if (!profileForm.fullName.trim() || !profileForm.email.trim()) {
+      setProfileError("Name and email cannot be empty.");
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      const token = localStorage.getItem('sf_token');
+      await axios.put(
+        'https://stockflow-wms-backend.onrender.com/api/users/me/profile',
+        profileForm,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert("Profile updated. Please log out and back in to see changes reflected everywhere.");
+      setEditingProfile(false);
+    } catch (err) {
+      setProfileError(err.response?.data?.message || "Failed to update profile.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   return (
     <>
       <div className="profile-card">
         <div className="profile-left">
           <div className="profile-avatar">{(user?.name || "??").slice(0, 2).toUpperCase()}</div>
-          <div>
-            <div className="profile-name">{user?.name || "Alex Rivera"}</div>
-            <div className="profile-role">Admin · {user?.email || "alex@stockflow.com"} · Joined Jan 2026</div>
-          </div>
+          {editingProfile ? (
+            <div>
+              <input
+                className="profile-edit-input"
+                style={{ marginBottom: 6 }}
+                value={profileForm.fullName}
+                onChange={(e) => setProfileForm((f) => ({ ...f, fullName: e.target.value }))}
+                placeholder="Full name"
+              />
+              <input
+                className="profile-edit-input"
+                value={profileForm.email}
+                onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="Email"
+              />
+              {profileError && <p className="profile-edit-error">{profileError}</p>}
+            </div>
+          ) : (
+            <div>
+              <div className="profile-name">{user?.name || "Alex Rivera"}</div>
+              <div className="profile-role">Admin · {user?.email || "alex@stockflow.com"}</div>
+            </div>
+          )}
         </div>
-        <button className="btn-outline" onClick={() => navigate("/admin/settings/edit-profile")}>Edit profile</button>
+        {editingProfile ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-outline" onClick={() => setEditingProfile(false)}>Cancel</button>
+            <button className="btn-primary" onClick={handleSaveProfile} disabled={profileSaving}>
+              {profileSaving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        ) : (
+          <button className="btn-outline" onClick={() => setEditingProfile(true)}>Edit profile</button>
+        )}
       </div>
 
       <div className="settings-grid">
@@ -354,11 +413,12 @@ function SecurityTab() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [twoFA, setTwoFA] = useState(false);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [sessions, setSessions] = useState(SESSIONS);
 
   const update = (key) => (e) => setPw((p) => ({ ...p, [key]: e.target.value }));
 
-  const handleUpdatePassword = () => {
+  const handleUpdatePassword = async () => {
     setError("");
     if (!pw.current || !pw.next || !pw.confirm) {
       setError("Please fill in all password fields.");
@@ -372,8 +432,21 @@ function SecurityTab() {
       setError("New password must be at least 8 characters.");
       return;
     }
-    alert("Wire this up to your real password-update API.");
-    setPw({ current: "", next: "", confirm: "" });
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('sf_token');
+      await axios.put(
+        'https://stockflow-wms-backend.onrender.com/api/users/me/password',
+        { currentPassword: pw.current, newPassword: pw.next },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert("Password updated successfully.");
+      setPw({ current: "", next: "", confirm: "" });
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update password.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const revokeSession = (device) => {
@@ -400,7 +473,9 @@ function SecurityTab() {
             <input type="password" placeholder="Re-enter new password" value={pw.confirm} onChange={update("confirm")} />
             {error && <p style={{ color: "#DC2626", fontSize: 13, marginTop: 6 }}>{error}</p>}
           </div>
-          <button className="btn-primary" onClick={handleUpdatePassword}>Update password</button>
+          <button className="btn-primary" onClick={handleUpdatePassword} disabled={saving}>
+            {saving ? "Updating…" : "Update password"}
+          </button>
         </div>
 
         <div className="panel">
