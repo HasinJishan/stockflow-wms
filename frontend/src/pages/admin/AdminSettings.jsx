@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
@@ -101,8 +101,6 @@ const STYLES = `
   .st .profile-avatar { width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; background: #DCE9FD; color: #2F6FED; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; }
   .st .profile-name { font-size: 16px; font-weight: 600; }
   .st .profile-role { font-size: 13px; color: #6B7280; margin-top: 2px; }
-  .st .profile-edit-input { height: 34px; font-size: 14px; padding: 0 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; display: block; width: 220px; max-width: 100%; }
-  .st .profile-edit-error { color: #DC2626; font-size: 12px; margin-top: 4px; }
 
   .st .usage-block { margin-bottom: 16px; }
   .st .usage-block:last-child { margin-bottom: 0; }
@@ -171,43 +169,52 @@ function Toggle({ on, onClick }) {
   );
 }
 
-function GeneralTab({ user }) {
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({ fullName: user?.name || "", email: user?.email || "" });
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileError, setProfileError] = useState("");
-
-  const [company, setCompany] = useState({
-    name: "StockFlow Logistics Pvt. Ltd.",
-    email: "ops@stockflow.com",
-  });
+function GeneralTab({ user, onGoToBilling }) {
+  const navigate = useNavigate();
+  const [company, setCompany] = useState({ name: "", email: "", timezone: "chennai", currency: "inr" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+  useEffect(() => {
+    const fetchCompany = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/settings/company', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setCompany({
+          name: res.data.name,
+          email: res.data.email,
+          timezone: res.data.timezone,
+          currency: res.data.currency
+        });
+      } catch (err) {
+        console.error("Failed to load company settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCompany();
+  }, []);
 
-  const handleSaveProfile = async () => {
-    setProfileError("");
-    if (!profileForm.fullName.trim() || !profileForm.email.trim()) {
-      setProfileError("Name and email cannot be empty.");
-      return;
-    }
-    setProfileSaving(true);
+  const handleSave = async () => {
+    setError("");
+    setSaving(true);
     try {
       const token = localStorage.getItem('sf_token');
       await axios.put(
-        'https://stockflow-wms-backend.onrender.com/api/users/me/profile',
-        profileForm,
+        'https://stockflow-wms-backend.onrender.com/api/settings/company',
+        company,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      alert("Profile updated. Please log out and back in to see changes reflected everywhere.");
-      setEditingProfile(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setProfileError(err.response?.data?.message || "Failed to update profile.");
+      setError(err.response?.data?.message || "Failed to save company settings.");
     } finally {
-      setProfileSaving(false);
+      setSaving(false);
     }
   };
 
@@ -216,68 +223,47 @@ function GeneralTab({ user }) {
       <div className="profile-card">
         <div className="profile-left">
           <div className="profile-avatar">{(user?.name || "??").slice(0, 2).toUpperCase()}</div>
-          {editingProfile ? (
-            <div>
-              <input
-                className="profile-edit-input"
-                style={{ marginBottom: 6 }}
-                value={profileForm.fullName}
-                onChange={(e) => setProfileForm((f) => ({ ...f, fullName: e.target.value }))}
-                placeholder="Full name"
-              />
-              <input
-                className="profile-edit-input"
-                value={profileForm.email}
-                onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="Email"
-              />
-              {profileError && <p className="profile-edit-error">{profileError}</p>}
-            </div>
-          ) : (
-            <div>
-              <div className="profile-name">{user?.name || "Alex Rivera"}</div>
-              <div className="profile-role">Admin · {user?.email || "alex@stockflow.com"}</div>
-            </div>
-          )}
-        </div>
-        {editingProfile ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-outline" onClick={() => setEditingProfile(false)}>Cancel</button>
-            <button className="btn-primary" onClick={handleSaveProfile} disabled={profileSaving}>
-              {profileSaving ? "Saving…" : "Save"}
-            </button>
+          <div>
+            <div className="profile-name">{user?.name || "Alex Rivera"}</div>
+            <div className="profile-role">Admin · {user?.email || "alex@stockflow.com"}</div>
           </div>
-        ) : (
-          <button className="btn-outline" onClick={() => setEditingProfile(true)}>Edit profile</button>
-        )}
+        </div>
+        <button className="btn-outline" onClick={() => navigate("/admin/settings/edit-profile")}>Edit profile</button>
       </div>
 
       <div className="settings-grid">
         <div className="panel">
           <div className="panel-title">Company profile</div>
-          <div className="form-row">
-            <label>Company name</label>
-            <input value={company.name} onChange={(e) => setCompany((c) => ({ ...c, name: e.target.value }))} />
-          </div>
-          <div className="form-row">
-            <label>Primary contact email</label>
-            <input value={company.email} onChange={(e) => setCompany((c) => ({ ...c, email: e.target.value }))} />
-          </div>
-          <div className="form-row">
-            <label>Time zone</label>
-            <select defaultValue="chennai">
-              <option value="chennai">(GMT+5:30) Chennai, Kolkata, Mumbai, New Delhi</option>
-            </select>
-          </div>
-          <div className="form-row">
-            <label>Default currency</label>
-            <select defaultValue="inr">
-              <option value="inr">INR — Indian Rupee</option>
-            </select>
-          </div>
-          <button className="btn-primary" style={{ marginTop: 6 }} onClick={handleSave}>
-            {saved ? "Saved ✓" : "Save changes"}
-          </button>
+          {loading ? (
+            <p style={{ fontSize: 13, color: "#9CA3AF" }}>Loading…</p>
+          ) : (
+            <>
+              <div className="form-row">
+                <label>Company name</label>
+                <input value={company.name} onChange={(e) => setCompany((c) => ({ ...c, name: e.target.value }))} />
+              </div>
+              <div className="form-row">
+                <label>Primary contact email</label>
+                <input value={company.email} onChange={(e) => setCompany((c) => ({ ...c, email: e.target.value }))} />
+              </div>
+              <div className="form-row">
+                <label>Time zone</label>
+                <select value={company.timezone} onChange={(e) => setCompany((c) => ({ ...c, timezone: e.target.value }))}>
+                  <option value="chennai">(GMT+5:30) Chennai, Kolkata, Mumbai, New Delhi</option>
+                </select>
+              </div>
+              <div className="form-row">
+                <label>Default currency</label>
+                <select value={company.currency} onChange={(e) => setCompany((c) => ({ ...c, currency: e.target.value }))}>
+                  <option value="inr">INR — Indian Rupee</option>
+                </select>
+              </div>
+              {error && <p style={{ color: "#DC2626", fontSize: 13, marginBottom: 10 }}>{error}</p>}
+              <button className="btn-primary" style={{ marginTop: 6 }} onClick={handleSave} disabled={saving}>
+                {saving ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
+              </button>
+            </>
+          )}
         </div>
 
         <div className="panel">
@@ -296,7 +282,7 @@ function GeneralTab({ user }) {
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18, paddingTop: 14, borderTop: "1px solid #F1F0EA" }}>
             <div style={{ fontSize: 13, color: "#6B7280" }}>Business plan · renews Aug 12, 2026</div>
-            <button className="badge blue clickable" onClick={() => alert("Navigate to Billing tab")}>Manage plan</button>
+            <button className="badge blue clickable" onClick={onGoToBilling}>Manage plan</button>
           </div>
         </div>
       </div>
@@ -626,7 +612,7 @@ export default function AdminSettings() {
           ))}
         </div>
 
-        {tab === "General" && <GeneralTab user={user} />}
+        {tab === "General" && <GeneralTab user={user} onGoToBilling={() => setTab("Billing")} />}
         {tab === "Notifications" && <NotificationsTab />}
         {tab === "Security" && <SecurityTab />}
         {tab === "Billing" && <BillingTab onChangePlan={() => setTab("Billing")} />}
