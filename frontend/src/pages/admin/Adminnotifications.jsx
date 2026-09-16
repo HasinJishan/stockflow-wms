@@ -1,64 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
-const NOTIFICATIONS = [
-  {
-    id: 1, category: "inventory", unread: true, iconBg: "#FCEBEB", iconColor: "#A32D2D",
-    icon: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
-    title: "Critical stock shortage", badge: ["Action needed", "red"],
-    desc: "Corrugated Box (M) is down to 8 units across all zones — below the 20-unit reorder threshold.",
-    time: "12 minutes ago", actions: [["Reorder now", "primary"], ["View item", "outline"]],
-  },
-  {
-    id: 2, category: "system", unread: true, iconBg: "#FCEBEB", iconColor: "#A32D2D",
-    icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
-    title: "Unusual login detected", badge: ["Action needed", "red"],
-    desc: "A login to David Chen's staff account was made from a new device in Chicago, IL.",
-    time: "40 minutes ago", actions: [["Review activity", "primary"], ["Dismiss", "outline"]],
-  },
-  {
-    id: 3, category: "orders", unread: true, iconBg: "#FAEEDA", iconColor: "#854F0B",
-    icon: "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z",
-    title: "Order #10432 escalated", badge: ["High priority", "amber"],
-    desc: "Delayed 2 days past expected ship date — flagged by warehouse staff for review.",
-    time: "1 hour ago", actions: [],
-  },
-  {
-    id: 4, category: "users", unread: true, iconBg: "#EFF4FF", iconColor: "#2F6FED",
-    icon: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6",
-    title: "3 new staff signups awaiting approval", badge: null,
-    desc: "Marcus Lee, Priya Raman, and Jordan Ellis requested staff accounts for the Austin facility.",
-    time: "2 hours ago", actions: [["Review requests", "primary"]],
-  },
-  {
-    id: 5, category: "system", unread: true, iconBg: "#F1F0EA", iconColor: "#6B7280",
-    icon: "M9 12l2 2 4-4M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0z",
-    title: "Weekly report ready", badge: null,
-    desc: "Your Inventory & Fulfillment report for Aug 4–10 has been generated.",
-    time: "3 hours ago", actions: [["View report", "outline"]],
-  },
-  {
-    id: 6, category: "system", unread: true, iconBg: "#EAF6EE", iconColor: "#1F9D55",
-    icon: "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01 9 11.01",
-    title: "Backup completed successfully", badge: null,
-    desc: "Nightly database backup finished in 4 minutes with no errors.",
-    time: "6 hours ago", actions: [],
-  },
-  {
-    id: 7, category: "users", unread: false, iconBg: "#F1F0EA", iconColor: "#6B7280",
-    icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
-    title: "Nora Haddad updated permissions for Alex Rivera", badge: null,
-    desc: "Role changed from Staff to Zone Supervisor.",
-    time: "Yesterday", actions: [],
-  },
-  {
-    id: 8, category: "orders", unread: false, iconBg: "#F1F0EA", iconColor: "#6B7280",
-    icon: "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z",
-    title: "246 orders fulfilled yesterday", badge: null,
-    desc: "Daily fulfillment summary: 98.6% on-time, 2.1% return rate.",
-    time: "Yesterday", actions: [],
-  },
-];
+import axios from "axios";
 
 const CATEGORIES = [
   ["all", "All"],
@@ -67,6 +9,13 @@ const CATEGORIES = [
   ["orders", "Orders"],
   ["system", "System & security"],
 ];
+
+const ICON_MAP = {
+  inventory: { bg: "#FCEBEB", color: "#A32D2D", d: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" },
+  orders: { bg: "#FAEEDA", color: "#854F0B", d: "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" },
+  users: { bg: "#EFF4FF", color: "#2F6FED", d: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6" },
+  system: { bg: "#F1F0EA", color: "#6B7280", d: "M9 12l2 2 4-4M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0z" },
+};
 
 const STYLES = `
   .an2 * { box-sizing: border-box; }
@@ -120,15 +69,13 @@ const STYLES = `
   .an2 .notif-title.unread { font-weight: 600; }
   .an2 .notif-desc { font-size: 12.5px; color: #6B7280; margin-top: 2px; line-height: 1.4; }
   .an2 .notif-time { font-size: 11px; color: #9CA3AF; margin-top: 5px; }
-  .an2 .notif-actions { display: flex; gap: 6px; margin-top: 8px; }
-  .an2 .btn-sm { height: 28px; padding: 0 11px; border-radius: 6px; font-size: 11.5px; font-weight: 500; cursor: pointer; font-family: inherit; }
-  .an2 .btn-sm.outline { background: #FFFFFF; border: 1px solid #D1D5DB; color: #111827; }
-  .an2 .btn-sm.primary { background: #2F6FED; border: none; color: #FFFFFF; }
   .an2 .unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #2F6FED; margin-top: 5px; flex-shrink: 0; }
   .an2 .unread-spacer { width: 8px; flex-shrink: 0; }
   .an2 .badge { font-size: 10.5px; padding: 2px 8px; border-radius: 6px; font-weight: 600; margin-left: 8px; display: inline-block; }
   .an2 .badge.red { background: #FCEBEB; color: #A32D2D; }
   .an2 .badge.amber { background: #FAEEDA; color: #854F0B; }
+
+  .an2 .empty { text-align: center; padding: 40px 20px; color: #9CA3AF; font-size: 13px; }
 
   .an2 .app-footer { padding: 10px 0 20px; border-top: 1px solid #E5E5E0; font-size: 11.5px; color: #9CA3AF; text-align: center; flex-shrink: 0; }
   .an2 .app-footer a { color: #9CA3AF; text-decoration: none; }
@@ -139,7 +86,6 @@ const STYLES = `
   }
   @media (max-width: 560px) {
     .an2 .kpi-row { grid-template-columns: 1fr; }
-    .an2 .notif-actions { flex-wrap: wrap; }
   }
 `;
 
@@ -149,10 +95,40 @@ const Icon = ({ d, ...p }) => (
   </svg>
 );
 
+function timeAgo(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} minute${mins > 1 ? "s" : ""} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  return `${days} days ago`;
+}
+
 export default function AdminNotifications() {
   const navigate = useNavigate();
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNotifs(res.data);
+      } catch (err) {
+        console.error("Failed to fetch notifications:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNotifications();
+  }, []);
 
   const filtered = useMemo(
     () => (filter === "all" ? notifs : notifs.filter((n) => n.category === filter)),
@@ -169,9 +145,31 @@ export default function AdminNotifications() {
 
   const unreadCount = notifs.filter((n) => n.unread).length;
   const lowStockCount = notifs.filter((n) => n.category === "inventory").length;
+  const newSignupsCount = notifs.filter((n) => n.category === "users").length;
 
-  const markAllRead = () => setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
-  const markRead = (id) => setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+  const markAllRead = async () => {
+    try {
+      const token = localStorage.getItem('sf_token');
+      await axios.patch('https://stockflow-wms-backend.onrender.com/api/notifications/read-all', {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
+    }
+  };
+
+  const markRead = async (id) => {
+    try {
+      const token = localStorage.getItem('sf_token');
+      await axios.patch(`https://stockflow-wms-backend.onrender.com/api/notifications/${id}/read`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNotifs((prev) => prev.map((n) => (n._id === id ? { ...n, unread: false } : n)));
+    } catch (err) {
+      console.error("Failed to mark as read:", err);
+    }
+  };
 
   return (
     <div className="an2">
@@ -201,24 +199,18 @@ export default function AdminNotifications() {
             <div className="kpi-card danger">
               <div className="kpi-label">Unread</div>
               <div className="kpi-value">{unreadCount}</div>
-              <div className="kpi-sub" style={{ color: "#A32D2D" }}>
-                {notifs.filter((n) => n.unread && n.badge?.[1] === "red").length} need action today
-              </div>
             </div>
             <div className="kpi-card warning">
-              <div className="kpi-label">Low stock alerts</div>
+              <div className="kpi-label">Inventory alerts</div>
               <div className="kpi-value">{lowStockCount}</div>
-              <div className="kpi-sub" style={{ color: "#854F0B" }}>3 critical</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-label">New signups</div>
-              <div className="kpi-value">12</div>
-              <div className="kpi-sub">This week</div>
+              <div className="kpi-value">{newSignupsCount}</div>
             </div>
             <div className="kpi-card success">
               <div className="kpi-label">System status</div>
               <div className="kpi-value">Operational</div>
-              <div className="kpi-sub" style={{ color: "#1F9D55" }}>All services online</div>
             </div>
           </div>
 
@@ -240,35 +232,42 @@ export default function AdminNotifications() {
               <button className="mark-read" onClick={markAllRead}>Mark all as read</button>
             </div>
 
-            {filtered.map((n) => (
-              <div className="notif-row" key={n.id} onClick={() => n.unread && markRead(n.id)}>
-                {n.unread ? <div className="unread-dot" /> : <div className="unread-spacer" />}
-                <div className="notif-icon" style={{ background: n.iconBg }}>
-                  <Icon stroke={n.iconColor} d={n.icon} />
-                </div>
-                <div className="notif-body">
-                  <div className={`notif-title${n.unread ? " unread" : ""}`}>
-                    {n.title}
-                    {n.badge && <span className={`badge ${n.badge[1]}`}>{n.badge[0]}</span>}
-                  </div>
-                  <div className="notif-desc">{n.desc}</div>
-                  <div className="notif-time">{n.time}</div>
-                  {n.actions.length > 0 && (
-                    <div className="notif-actions" onClick={(e) => e.stopPropagation()}>
-                      {n.actions.map(([label, style]) => (
-                        <button
-                          key={label}
-                          className={`btn-sm ${style}`}
-                          onClick={() => alert(`Wire this up to: ${label}`)}
-                        >
-                          {label}
-                        </button>
-                      ))}
+            {loading ? (
+              <div className="empty">Loading notifications…</div>
+            ) : filtered.length === 0 ? (
+              <div className="empty">No notifications yet.</div>
+            ) : (
+              filtered.map((n) => {
+                const iconInfo = ICON_MAP[n.category] || ICON_MAP.system;
+                return (
+                  <div
+                    className="notif-row"
+                    key={n._id}
+                    onClick={() => {
+                      if (n.unread) markRead(n._id);
+                      if (n.link) navigate(n.link);
+                    }}
+                  >
+                    {n.unread ? <div className="unread-dot" /> : <div className="unread-spacer" />}
+                    <div className="notif-icon" style={{ background: iconInfo.bg }}>
+                      <Icon stroke={iconInfo.color} d={iconInfo.d} />
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
+                    <div className="notif-body">
+                      <div className={`notif-title${n.unread ? " unread" : ""}`}>
+                        {n.title}
+                        {n.priority !== "none" && (
+                          <span className={`badge ${n.priority}`}>
+                            {n.priority === "red" ? "Action needed" : "High priority"}
+                          </span>
+                        )}
+                      </div>
+                      {n.description && <div className="notif-desc">{n.description}</div>}
+                      <div className="notif-time">{timeAgo(n.createdAt)}</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

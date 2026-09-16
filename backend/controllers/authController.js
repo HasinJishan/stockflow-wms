@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail'); // Ensure this utility exists
+const createNotification = require('../utils/createNotification');
 
 // 1. REGISTER (Professional: Force role + Send Verification)
 exports.register = async (req, res) => {
@@ -28,6 +29,14 @@ exports.register = async (req, res) => {
             password: hashedPassword, 
             role: finalRole,
             verificationToken: vToken 
+        });
+
+        // Notify admins of the new signup
+        await createNotification({
+            category: 'users',
+            title: `New ${finalRole} signup: ${fullName}`,
+            description: `${email} just created an account.`,
+            link: '/admin/users'
         });
 
         // Professional: Send Verification Email (won't block registration if it fails)

@@ -57,6 +57,16 @@ exports.createOrder = async (req, res) => {
     }
 };
 
+const createNotification = require('../utils/createNotification');
+// ... after order is created:
+await createNotification({
+    category: 'orders',
+    title: `New order #${order.orderNumber}`,
+    description: `Order placed for $${order.total.toFixed(2)}.`,
+    link: `/admin/orders/${order.orderNumber}`
+});
+
+
 // UPDATE order status (admin/staff)
 exports.updateOrderStatus = async (req, res) => {
     try {
