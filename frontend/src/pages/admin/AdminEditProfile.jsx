@@ -1,5 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 
@@ -45,6 +46,7 @@ const STYLES = `
   .ep .perm-check { width: 16px; height: 16px; border-radius: 4px; background: #EAF6EE; color: #1F9D55; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
 
   .ep .saved-msg { font-size: 13px; color: #1F9D55; margin-top: 8px; }
+  .ep .error-msg { font-size: 13px; color: #DC2626; margin-top: 8px; }
 
   .ep .app-footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12px; color: #9CA3AF; text-align: center; }
   .ep .app-footer a { color: #9CA3AF; text-decoration: none; }
@@ -62,18 +64,24 @@ export default function AdminEditProfile() {
   const { user } = useAuth();
   const fileInputRef = useRef(null);
 
-  const [form, setForm] = useState({
-    firstName: user?.name?.split(" ")[0] || "Alex",
-    lastName: user?.name?.split(" ")[1] || "Rivera",
-    email: user?.email || "alex@stockflow.com",
-    phone: "+91 98765 43210",
-    jobTitle: "Operations Administrator",
-    department: "Operations",
-    bio: "Managing inventory operations and system access across all StockFlow warehouse locations.",
-  });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "" });
+  const [loading, setLoading] = useState(true);
   const [photo, setPhoto] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      const [first, ...rest] = (user.name || "").split(" ");
+      setForm({
+        firstName: first || "",
+        lastName: rest.join(" ") || "",
+        email: user.email || "",
+      });
+    }
+    setLoading(false);
+  }, [user]);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -85,15 +93,28 @@ export default function AdminEditProfile() {
     setPhoto(URL.createObjectURL(file));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setError("");
+    if (!form.firstName.trim() || !form.email.trim()) {
+      setError("First name and email are required.");
+      return;
+    }
     setSaving(true);
-    // Replace with your real profile-update API call, e.g.:
-    // await fetch('/api/profile', { method: 'PATCH', body: JSON.stringify(form) });
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      const token = localStorage.getItem('sf_token');
+      const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+      await axios.put(
+        'https://stockflow-wms-backend.onrender.com/api/users/me/profile',
+        { fullName, email: form.email.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }, 500);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update profile.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -132,16 +153,13 @@ export default function AdminEditProfile() {
                   style={{ display: "none" }}
                   onChange={handlePhotoSelect}
                 />
-                <div className="photo-hint">JPG or PNG. Max 2MB.</div>
+                <div className="photo-hint">JPG or PNG. Max 2MB. (Preview only — not yet saved to your account.)</div>
               </div>
             </div>
 
             <div className="panel">
               <div className="panel-title">Account details</div>
-              <div className="detail-row"><span className="detail-label">Account ID</span><span className="detail-value">USR-00214</span></div>
               <div className="detail-row"><span className="detail-label">Role</span><span className="badge blue">{user?.role ? user.role[0].toUpperCase() + user.role.slice(1) : "Admin"}</span></div>
-              <div className="detail-row"><span className="detail-label">Joined</span><span className="detail-value">Jan 14, 2026</span></div>
-              <div className="detail-row"><span className="detail-label">Last login</span><span className="detail-value">Today, 9:02 AM</span></div>
               <div className="detail-row"><span className="detail-label">Status</span><span className="badge green">Active</span></div>
             </div>
           </div>
@@ -149,30 +167,19 @@ export default function AdminEditProfile() {
           <div className="col">
             <div className="panel">
               <div className="panel-title">Personal information</div>
-              <div className="form-2col">
-                <div className="form-row"><label>First name</label><input value={form.firstName} onChange={update("firstName")} /></div>
-                <div className="form-row"><label>Last name</label><input value={form.lastName} onChange={update("lastName")} /></div>
-              </div>
-              <div className="form-2col">
-                <div className="form-row"><label>Email address</label><input value={form.email} onChange={update("email")} /></div>
-                <div className="form-row"><label>Phone number</label><input value={form.phone} onChange={update("phone")} /></div>
-              </div>
-              <div className="form-2col">
-                <div className="form-row"><label>Job title</label><input value={form.jobTitle} onChange={update("jobTitle")} /></div>
-                <div className="form-row">
-                  <label>Department</label>
-                  <select value={form.department} onChange={update("department")}>
-                    <option>Operations</option>
-                    <option>Warehouse</option>
-                    <option>IT</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-row">
-                <label>Bio</label>
-                <textarea value={form.bio} onChange={update("bio")} />
-              </div>
-              {saved && <p className="saved-msg">Profile updated ✓</p>}
+              {loading ? (
+                <p style={{ fontSize: 13, color: "#9CA3AF" }}>Loading…</p>
+              ) : (
+                <>
+                  <div className="form-2col">
+                    <div className="form-row"><label>First name</label><input value={form.firstName} onChange={update("firstName")} /></div>
+                    <div className="form-row"><label>Last name</label><input value={form.lastName} onChange={update("lastName")} /></div>
+                  </div>
+                  <div className="form-row"><label>Email address</label><input value={form.email} onChange={update("email")} /></div>
+                  {saved && <p className="saved-msg">Profile updated ✓</p>}
+                  {error && <p className="error-msg">{error}</p>}
+                </>
+              )}
             </div>
 
             <div className="panel">
