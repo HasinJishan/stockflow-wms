@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const createNotification = require('../utils/createNotification');
 
 // GET all orders (admin/staff)
 exports.getAllOrders = async (req, res) => {
@@ -51,21 +52,23 @@ exports.createOrder = async (req, res) => {
             notes
         });
 
+        // Notify admins of the new order
+        try {
+            await createNotification({
+                category: 'orders',
+                title: `New order #${order.orderNumber}`,
+                description: `Order placed for $${order.total.toFixed(2)}.`,
+                link: `/admin/orders/${order.orderNumber}`
+            });
+        } catch (notifyError) {
+            console.error("⚠️ Failed to create order notification:", notifyError.message);
+        }
+
         res.status(201).json({ message: "Order created successfully", order });
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });
     }
 };
-
-const createNotification = require('../utils/createNotification');
-// ... after order is created:
-await createNotification({
-    category: 'orders',
-    title: `New order #${order.orderNumber}`,
-    description: `Order placed for $${order.total.toFixed(2)}.`,
-    link: `/admin/orders/${order.orderNumber}`
-});
-
 
 // UPDATE order status (admin/staff)
 exports.updateOrderStatus = async (req, res) => {
