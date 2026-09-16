@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import axios from "axios";
 
 const ICONS = {
   Dashboard: (
@@ -259,9 +260,29 @@ export default function DashboardLayout({ title, subtitle, breadcrumb, actions, 
 
   const items = NAV_BY_ROLE[user?.role] || [];
   const notifPath = items.find(([label]) => label === "Notifications")?.[1] || "/admin/notifications";
-  const initials = (user?.name || "??").slice(0, 2).toUpperCase();
-  // TODO: replace with a real unread count from your notifications API/context
-  const unreadCount = 6;
+    const initials = (user?.name || "??").slice(0, 2).toUpperCase();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role !== "admin" && user?.role !== "staff") return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem('sf_token');
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const count = res.data.filter((n) => n.unread).length;
+        setUnreadCount(count);
+      } catch (err) {
+        console.error("Failed to fetch unread notification count:", err);
+      }
+    };
+
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000); // refresh every 30s
+    return () => clearInterval(interval);
+  }, [user?.role, location.pathname]);
 
   const handleAvatarClick = () => {
     if (window.confirm("Log out of StockFlow WMS?")) {
