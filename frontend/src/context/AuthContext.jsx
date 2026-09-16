@@ -67,9 +67,18 @@ const login = async ({ email, password }) => {
     localStorage.clear();
   };
 
+  // Immediately reflect profile changes (name/email) everywhere without needing to log out/in
+  const updateUser = (updates) => {
+    setUser((prev) => {
+      const next = { ...prev, ...updates };
+      localStorage.setItem("sf_user", JSON.stringify(next));
+      return next;
+    });
+  };
+
   // 4. Pass 'loading' in the Provider
   return (
-    <AuthContext.Provider value={{ user, login, logout, token, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, token, loading }}>
       {children}
     </AuthContext.Provider>
   );

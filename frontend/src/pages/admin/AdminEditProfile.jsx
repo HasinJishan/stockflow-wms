@@ -61,7 +61,7 @@ const STYLES = `
 
 export default function AdminEditProfile() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const fileInputRef = useRef(null);
 
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "" });
@@ -93,7 +93,7 @@ export default function AdminEditProfile() {
     setPhoto(URL.createObjectURL(file));
   };
 
-  const handleSave = async () => {
+const handleSave = async () => {
     setError("");
     if (!form.firstName.trim() || !form.email.trim()) {
       setError("First name and email are required.");
@@ -108,6 +108,7 @@ export default function AdminEditProfile() {
         { fullName, email: form.email.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      updateUser({ name: fullName, email: form.email.trim() });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
@@ -115,7 +116,7 @@ export default function AdminEditProfile() {
     } finally {
       setSaving(false);
     }
-  };
+};
 
   return (
     <DashboardLayout
