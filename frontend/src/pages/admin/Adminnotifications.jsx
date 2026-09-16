@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth } from "../context/AuthContext"; // adjust path if this file lives elsewhere
+import { useAuth } from "../../context/AuthContext";
 
 const CATEGORIES = [
   ["all", "All"],
