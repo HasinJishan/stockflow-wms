@@ -21,6 +21,8 @@ const STYLES = `
   .action-buttons { display: flex; gap: 12px; }
   .btn-cancel { background: #FFFFFF; border: 1px solid #D1D5DB; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
   .btn-save { background: #2563EB; border: none; color: #FFFFFF; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+  .ep-app-footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #9CA3AF; text-align: center; }
+  .ep-app-footer a { color: #9CA3AF; text-decoration: none; }
   @media (max-width: 900px) { .edit-grid { grid-template-columns: 1fr; } }
 `;
 
@@ -136,6 +138,10 @@ export default function AdminEditProduct() {
             </div>
           </div>
         </form>
+
+        <div className="ep-app-footer">
+          &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
+        </div>
       </div>
     </DashboardLayout>
   );

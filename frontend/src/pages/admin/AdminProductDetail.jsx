@@ -50,6 +50,9 @@ const STYLES = `
   .text-green { color: #16A34A; font-weight: 600; }
 
   .pd-btn-edit { background: #2563EB; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; }
+
+  .pd-app-footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #9CA3AF; text-align: center; }
+  .pd-app-footer a { color: #9CA3AF; text-decoration: none; }
 `;
 
 const formatDate = (dateStr) => {
@@ -215,6 +218,10 @@ export default function AdminProductDetail() {
               )}
             </div>
           </main>
+        </div>
+
+        <div className="pd-app-footer">
+          &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
         </div>
       </div>
     </DashboardLayout>
