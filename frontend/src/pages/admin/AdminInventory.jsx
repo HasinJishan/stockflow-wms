@@ -53,6 +53,8 @@ const STYLES = `
   .inv .badge.amber { background: #FAEEDA; color: #854F0B; }
   .inv .badge.red { background: #FCEBEB; color: #A32D2D; }
   .inv .empty { text-align: center; padding: 40px; color: #6B7280; }
+  .inv .app-footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12px; color: #9CA3AF; text-align: center; }
+  .inv .app-footer a { color: #9CA3AF; text-decoration: none; }
 `;
 
 export default function AdminInventory() {
@@ -153,6 +155,10 @@ export default function AdminInventory() {
               </tbody>
             </table>
           )}
+        </div>
+
+        <div className="app-footer">
+          &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
         </div>
       </div>
     </DashboardLayout>

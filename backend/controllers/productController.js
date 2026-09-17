@@ -1,7 +1,15 @@
 const Product = require('../models/Product');
 const createNotification = require('../utils/createNotification');
+const Notification = require('../models/Notification');
 
-// Helper: check if a product is low/out of stock and fire a notification if needed
+// Compute the correct status string based on quantity vs reorderLevel
+const computeStatus = (quantity, reorderLevel) => {
+    if (quantity <= 0) return "Out of stock";
+    if (quantity <= reorderLevel) return "Low stock";
+    return "In stock";
+};
+
+// Fire a low-stock notification if needed (avoids duplicate spam)
 const checkLowStock = async (product) => {
     if (product.quantity <= product.reorderLevel) {
         const priority = product.quantity <= 0 ? 'red' : 'amber';
@@ -9,9 +17,6 @@ const checkLowStock = async (product) => {
             ? `Out of stock: ${product.name}`
             : `Low stock: ${product.name}`;
 
-        // Avoid duplicate spam: only create a new notification if there isn't already
-        // an unread low-stock notification for this exact product
-        const Notification = require('../models/Notification');
         const existing = await Notification.findOne({
             category: 'inventory',
             title,
@@ -41,7 +46,10 @@ exports.getProducts = async (req, res) => {
 
 exports.addProduct = async (req, res) => {
     try {
-        const product = new Product(req.body);
+        const data = { ...req.body };
+        data.status = computeStatus(data.quantity ?? 0, data.reorderLevel ?? 0);
+
+        const product = new Product(data);
         await product.save();
         await checkLowStock(product);
         res.status(201).json(product);
@@ -62,7 +70,19 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const updatedProduct = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const data = { ...req.body };
+
+        // Recompute status if quantity or reorderLevel is part of this update
+        if (data.quantity !== undefined || data.reorderLevel !== undefined) {
+            const current = await Product.findById(req.params.id);
+            if (!current) return res.status(404).json({ message: "Product not found" });
+
+            const newQuantity = data.quantity !== undefined ? data.quantity : current.quantity;
+            const newReorderLevel = data.reorderLevel !== undefined ? data.reorderLevel : current.reorderLevel;
+            data.status = computeStatus(newQuantity, newReorderLevel);
+        }
+
+        const updatedProduct = await Product.findByIdAndUpdate(req.params.id, data, { new: true });
         if (updatedProduct) {
             await checkLowStock(updatedProduct);
         }
