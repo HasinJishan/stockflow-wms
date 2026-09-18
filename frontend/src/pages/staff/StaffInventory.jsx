@@ -1,26 +1,14 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const ZONES = ["All bins", "Zone A", "Zone B", "Zone C"];
+const CATEGORIES = ["All", "Packaging", "Electronics", "Apparel", "Low stock"];
 
-const ITEMS = [
-  { product: "Corrugated box (M)", bin: "B-14", zone: "Zone B", expected: 25, counted: 15 },
-  { product: "Pallet wrap 20\"", bin: "C-11", zone: "Zone C", expected: 20, counted: 3 },
-  { product: "Barcode scanner X200", bin: "D-05", zone: "Zone A", expected: 48, counted: 48 },
-  { product: "Warehouse gloves (L)", bin: "C-02", zone: "Zone C", expected: 210, counted: 210 },
-  { product: "Shipping labels (roll)", bin: "A-06", zone: "Zone A", expected: 30, counted: 8 },
-  { product: "Packing tape (48mm)", bin: "A-09", zone: "Zone A", expected: 40, counted: 18 },
-  { product: "Handheld RF terminal", bin: "D-08", zone: "Zone A", expected: 32, counted: 32 },
-  { product: "Hi-vis safety vest", bin: "C-05", zone: "Zone C", expected: 15, counted: 0 },
-  { product: "Bubble wrap roll", bin: "A-12", zone: "Zone A", expected: 22, counted: 22 },
-  { product: "Stretch film dispenser", bin: "B-07", zone: "Zone B", expected: 10, counted: 6 },
-];
-
-function statusFor(expected, counted) {
-  if (expected === counted) return { label: "Matches", color: "green" };
-  if (counted === 0 || expected - counted >= expected * 0.6) return { label: "Flagged", color: "red" };
-  return { label: "Recount", color: "amber" };
-}
+const BADGE_CLASS = {
+  "Low stock": "amber",
+  "In stock": "green",
+  "Out of stock": "red",
+};
 
 const STYLES = `
   .si * { box-sizing: border-box; }
@@ -72,32 +60,58 @@ const STYLES = `
 `;
 
 export default function StaffInventory() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [zone, setZone] = useState("All bins");
+  const [category, setCategory] = useState("All");
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const token = localStorage.getItem("sf_token");
+        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/products", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setProducts(res.data);
+      } catch (err) {
+        console.error("Failed to fetch inventory:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   const filtered = useMemo(() => {
-    return ITEMS.filter((i) => {
-      const matchesZone = zone === "All bins" || i.zone === zone;
+    return products.filter((p) => {
       const matchesQuery =
-        i.product.toLowerCase().includes(query.toLowerCase()) ||
-        i.bin.toLowerCase().includes(query.toLowerCase());
-      return matchesZone && matchesQuery;
+        p.name.toLowerCase().includes(query.toLowerCase()) ||
+        p.sku.toLowerCase().includes(query.toLowerCase()) ||
+        (p.binLocation || "").toLowerCase().includes(query.toLowerCase());
+      const matchesCategory =
+        category === "All"
+          ? true
+          : category === "Low stock"
+          ? p.status === "Low stock" || p.status === "Out of stock"
+          : p.category === category;
+      return matchesQuery && matchesCategory;
     });
-  }, [query, zone]);
+  }, [query, category, products]);
 
-  const flaggedCount = ITEMS.filter((i) => statusFor(i.expected, i.counted).label === "Flagged").length;
-  const recountCount = ITEMS.filter((i) => statusFor(i.expected, i.counted).label === "Recount").length;
+  const totalSkus = products.length;
+  const flaggedCount = products.filter((p) => p.status === "Out of stock").length;
+  const lowStockCount = products.filter((p) => p.status === "Low stock").length;
 
   return (
-    <DashboardLayout title="Inventory" subtitle="Zone B stock levels · read access, request recounts as needed.">
+    <DashboardLayout title="Inventory" subtitle="Live stock levels across all warehouse bins.">
       <div className="si">
         <style>{STYLES}</style>
 
         <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">SKUs in Zone B</div><div className="kpi-value">412</div></div>
-          <div className="kpi-card danger"><div className="kpi-label">Discrepancies flagged</div><div className="kpi-value">{flaggedCount}</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Pending recounts</div><div className="kpi-value">{recountCount}</div></div>
-          <div className="kpi-card"><div className="kpi-label">Last full count</div><div className="kpi-value" style={{ fontSize: 17 }}>Jul 20, 2026</div></div>
+          <div className="kpi-card"><div className="kpi-label">Total SKUs</div><div className="kpi-value">{totalSkus}</div></div>
+          <div className="kpi-card danger"><div className="kpi-label">Out of stock</div><div className="kpi-value">{flaggedCount}</div></div>
+          <div className="kpi-card warning"><div className="kpi-label">Low stock</div><div className="kpi-value">{lowStockCount}</div></div>
+          <div className="kpi-card"><div className="kpi-label">In stock</div><div className="kpi-value">{totalSkus - flaggedCount - lowStockCount}</div></div>
         </div>
 
         <div className="toolbar">
@@ -105,38 +119,37 @@ export default function StaffInventory() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input placeholder="Search by product or bin…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input placeholder="Search by product, SKU, or bin…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <div className="filter-tabs">
-            {ZONES.map((z) => (
-              <button key={z} className={`filter-tab${zone === z ? " active" : ""}`} onClick={() => setZone(z)}>
-                {z}
+            {CATEGORIES.map((c) => (
+              <button key={c} className={`filter-tab${category === c ? " active" : ""}`} onClick={() => setCategory(c)}>
+                {c}
               </button>
             ))}
           </div>
         </div>
 
         <div className="panel">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="empty">Loading inventory…</div>
+          ) : filtered.length === 0 ? (
             <div className="empty">No items match your search or filter.</div>
           ) : (
             <table>
               <thead>
-                <tr><th>Product</th><th>Bin</th><th>Expected</th><th>Counted</th><th className="num">Action</th></tr>
+                <tr><th>Product</th><th>SKU</th><th>Bin</th><th>Stock</th><th className="num">Status</th></tr>
               </thead>
               <tbody>
-                {filtered.map((i) => {
-                  const s = statusFor(i.expected, i.counted);
-                  return (
-                    <tr key={i.bin + i.product}>
-                      <td>{i.product}</td>
-                      <td>{i.bin}</td>
-                      <td>{i.expected}</td>
-                      <td>{i.counted}</td>
-                      <td className="num"><span className={`badge ${s.color}`}>{s.label}</span></td>
-                    </tr>
-                  );
-                })}
+                {filtered.map((p) => (
+                  <tr key={p._id}>
+                    <td>{p.name}</td>
+                    <td>{p.sku}</td>
+                    <td>{p.binLocation || "—"}</td>
+                    <td>{p.quantity}</td>
+                    <td className="num"><span className={`badge ${BADGE_CLASS[p.status]}`}>{p.status}</span></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}

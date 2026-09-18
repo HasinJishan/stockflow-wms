@@ -1,31 +1,13 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const PICK_QUEUE = [
-  { order: "#10432", bin: "B-14", items: 3, assigned: "Maria K.", status: "Picking" },
-  { order: "#10433", bin: "A-02", items: 1, assigned: "You", status: "Packed" },
-  { order: "#10434", bin: "C-08", items: 5, assigned: "—", status: "Pending" },
-  { order: "#10435", bin: "B-21", items: 2, assigned: "James O.", status: "Shipped" },
-  { order: "#10436", bin: "D-05", items: 4, assigned: "You", status: "Picking" },
-];
-
-const RESTOCK_ALERTS = [
-  { product: "Pallet wrap 20\"", bin: "C-11", left: "3 left", level: "red" },
-  { product: "Shipping labels", bin: "A-06", left: "8 left", level: "amber" },
-  { product: "Packing tape", bin: "A-09", left: "18 left", level: "amber" },
-];
-
-const ZONE_ACTIVITY = [
-  ["Maria K. started picking #10432", "12 min ago"],
-  ["Order #10435 shipped", "40 min ago"],
-  ["James O. flagged low stock, bin C-11", "1 hr ago"],
-];
-
 const BADGE_STYLE = {
-  Picking: "amber",
-  Packed: "blue",
   Pending: "gray",
-  Shipped: "green",
+  Processing: "amber",
+  Shipped: "blue",
+  Delivered: "green",
 };
 
 const STYLES = `
@@ -53,6 +35,8 @@ const STYLES = `
   .sd th.num, .sd td.num { text-align: right; }
   .sd td { padding: 12px 8px; border-bottom: 1px solid #F1F0EA; }
   .sd tr:last-child td { border-bottom: none; }
+  .sd tr.clickable { cursor: pointer; }
+  .sd tr.clickable:hover { background: #F9FAFB; }
 
   .sd .badge { font-size: 12px; padding: 4px 12px; border-radius: 8px; font-weight: 600; display: inline-block; border: none; cursor: pointer; font-family: inherit; }
   .sd .badge.amber { background: #FAEEDA; color: #854F0B; }
@@ -62,6 +46,8 @@ const STYLES = `
   .sd .badge.red { background: #FCEBEB; color: #A32D2D; }
 
   .sd .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .sd .empty { text-align: center; padding: 30px; color: #9CA3AF; font-size: 13px; }
 
   .sd .app-footer { margin-top: 8px; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12px; color: #9CA3AF; text-align: center; }
   .sd .app-footer a { color: #9CA3AF; text-decoration: none; }
@@ -76,77 +62,139 @@ const STYLES = `
 `;
 
 export default function StaffDashboard() {
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("sf_token");
+        const [ordersRes, productsRes] = await Promise.all([
+          axios.get("https://stockflow-wms-backend.onrender.com/api/orders", {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get("https://stockflow-wms-backend.onrender.com/api/products", {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+        setOrders(ordersRes.data);
+        setLowStockProducts(
+          productsRes.data.filter((p) => p.status === "Low stock" || p.status === "Out of stock")
+        );
+      } catch (err) {
+        console.error("Failed to load staff dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const today = new Date().toDateString();
+  const ordersToFulfill = orders.filter((o) => o.status === "Pending" || o.status === "Processing").length;
+  const shippedToday = orders.filter((o) => o.status === "Shipped" && new Date(o.updatedAt).toDateString() === today).length;
+  const deliveredCount = orders.filter((o) => o.status === "Delivered").length;
+  const onTimeRate = orders.length > 0 ? Math.round((deliveredCount / orders.length) * 100) : 0;
+
+  const pickQueue = orders
+    .filter((o) => o.status === "Pending" || o.status === "Processing" || o.status === "Shipped")
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 5);
+
   return (
-    <DashboardLayout title="Today's tasks" subtitle="Shift: 8:00 AM – 4:00 PM · Zone B">
+    <DashboardLayout title="Today's tasks" subtitle="Your current workload across pending orders and stock alerts.">
       <div className="sd">
         <style>{STYLES}</style>
 
-        <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Orders to fulfill</div><div className="kpi-value">18</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Items to restock</div><div className="kpi-value">7</div></div>
-          <div className="kpi-card"><div className="kpi-label">Shipped today</div><div className="kpi-value">42</div></div>
-          <div className="kpi-card success"><div className="kpi-label">On-time rate</div><div className="kpi-value">97%</div></div>
-        </div>
+        {loading ? (
+          <div className="empty">Loading dashboard…</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <div className="kpi-card"><div className="kpi-label">Orders to fulfill</div><div className="kpi-value">{ordersToFulfill}</div></div>
+              <div className="kpi-card warning"><div className="kpi-label">Items to restock</div><div className="kpi-value">{lowStockProducts.length}</div></div>
+              <div className="kpi-card"><div className="kpi-label">Shipped today</div><div className="kpi-value">{shippedToday}</div></div>
+              <div className="kpi-card success"><div className="kpi-label">Delivered rate</div><div className="kpi-value">{onTimeRate}%</div></div>
+            </div>
 
-        <div className="panel">
-          <div className="panel-head">
-            <div className="panel-title">Pick queue</div>
-            <button className="badge blue" onClick={() => alert("Wire this up to the full pick queue")}>View all</button>
-          </div>
-          <table>
-            <thead>
-              <tr><th>Order</th><th>Bin</th><th>Items</th><th>Assigned</th><th className="num">Status</th></tr>
-            </thead>
-            <tbody>
-              {PICK_QUEUE.map((r) => (
-                <tr key={r.order}>
-                  <td>{r.order}</td>
-                  <td>{r.bin}</td>
-                  <td>{r.items}</td>
-                  <td>{r.assigned}</td>
-                  <td className="num"><span className={`badge ${BADGE_STYLE[r.status]}`}>{r.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">Pick queue</div>
+                <button className="badge blue" onClick={() => navigate("/staff/pick-pack")}>View all</button>
+              </div>
+              {pickQueue.length === 0 ? (
+                <div className="empty">No orders awaiting fulfillment right now.</div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr><th>Order</th><th>Customer</th><th>Items</th><th className="num">Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {pickQueue.map((o) => (
+                      <tr key={o._id} className="clickable" onClick={() => navigate(`/admin/orders/${o.orderNumber}`)}>
+                        <td>#{o.orderNumber}</td>
+                        <td>{o.customer?.fullName || "Unknown"}</td>
+                        <td>{o.items.length}</td>
+                        <td className="num"><span className={`badge ${BADGE_STYLE[o.status]}`}>{o.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
 
-        <div className="dash-grid">
-          <div className="panel">
-            <div className="panel-title" style={{ marginBottom: 14 }}>Restock alerts</div>
-            <table>
-              <thead>
-                <tr><th>Product</th><th>Bin</th><th className="num">Stock left</th></tr>
-              </thead>
-              <tbody>
-                {RESTOCK_ALERTS.map((r) => (
-                  <tr key={r.product}>
-                    <td>{r.product}</td>
-                    <td>{r.bin}</td>
-                    <td className="num"><span className={`badge ${r.level}`}>{r.left}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <div className="dash-grid">
+              <div className="panel">
+                <div className="panel-title" style={{ marginBottom: 14 }}>Restock alerts</div>
+                {lowStockProducts.length === 0 ? (
+                  <div className="empty">No low stock items right now.</div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr><th>Product</th><th>Bin</th><th className="num">Stock left</th></tr>
+                    </thead>
+                    <tbody>
+                      {lowStockProducts.slice(0, 6).map((p) => (
+                        <tr key={p._id}>
+                          <td>{p.name}</td>
+                          <td>{p.binLocation || "—"}</td>
+                          <td className="num">
+                            <span className={`badge ${p.status === "Out of stock" ? "red" : "amber"}`}>
+                              {p.quantity} left
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
 
-          <div className="panel">
-            <div className="panel-title" style={{ marginBottom: 14 }}>Zone B activity</div>
-            <table>
-              <thead>
-                <tr><th>Event</th><th className="num">Time</th></tr>
-              </thead>
-              <tbody>
-                {ZONE_ACTIVITY.map(([event, time]) => (
-                  <tr key={event}>
-                    <td>{event}</td>
-                    <td className="num">{time}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              <div className="panel">
+                <div className="panel-title" style={{ marginBottom: 14 }}>Recent orders</div>
+                {orders.length === 0 ? (
+                  <div className="empty">No orders yet.</div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr><th>Order</th><th className="num">Placed</th></tr>
+                    </thead>
+                    <tbody>
+                      {orders.slice(0, 6).map((o) => (
+                        <tr key={o._id}>
+                          <td>#{o.orderNumber} — {o.customer?.fullName || "Unknown"}</td>
+                          <td className="num">{new Date(o.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="app-footer">
           &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
