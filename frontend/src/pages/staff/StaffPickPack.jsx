@@ -1,50 +1,22 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const QUEUE = [
-  { order: "#10432", bin: "B-14", items: 3, assigned: "Maria K.", status: "Picking" },
-  { order: "#10434", bin: "C-08", items: 5, assigned: "—", status: "Unassigned" },
-  { order: "#10436", bin: "D-05", items: 4, assigned: "You", status: "Packing" },
-  { order: "#10437", bin: "A-11", items: 2, assigned: "James O.", status: "Picking" },
-  { order: "#10438", bin: "B-03", items: 6, assigned: "—", status: "Unassigned" },
-  { order: "#10439", bin: "C-14", items: 1, assigned: "Maria K.", status: "Packing" },
-  { order: "#10440", bin: "A-04", items: 3, assigned: "—", status: "Unassigned" },
-];
-
-const PICK_LISTS = {
-  "#10432": [
-    { label: "Corrugated box (M) · Bin B-14 · Qty 3", checked: false },
-  ],
-  "#10436": [
-    { label: "Barcode scanner X200 · Bin D-05 · Qty 1", checked: true },
-    { label: "Packing tape (48mm) · Bin A-09 · Qty 2", checked: true },
-    { label: "Warehouse gloves (L) · Bin C-02 · Qty 1", checked: false },
-    { label: "Corrugated box (M) · Bin B-14 · Qty 1", checked: false },
-  ],
-  "#10437": [
-    { label: "Shipping labels (roll) · Bin A-06 · Qty 2", checked: false },
-  ],
-};
-
-const STATIONS = [
-  { name: "Station 1", status: "In use", color: "amber" },
-  { name: "Station 2", status: "Free", color: "green" },
-  { name: "Station 3", status: "In use", color: "amber" },
-];
-
 const STATUS_COLOR = {
-  Picking: "amber",
-  Packing: "blue",
-  Unassigned: "gray",
+  Pending: "gray",
+  Processing: "amber",
+  Shipped: "blue",
+  Delivered: "green",
 };
 
-const FILTER_TABS = ["All", "Picking", "Packing"];
+const FILTER_TABS = ["All", "Pending", "Processing"];
 
 const STYLES = `
   .pp * { box-sizing: border-box; }
   .pp { font-family: 'Inter', sans-serif; }
 
-  .pp .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+  .pp .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
   .pp .kpi-card { background: #F3F2EC; border-radius: 12px; padding: 16px; }
   .pp .kpi-card.warning { background: #FAEEDA; }
   .pp .kpi-card.success { background: #EAF6EE; }
@@ -64,7 +36,7 @@ const STYLES = `
   .pp .filter-tab { padding: 7px 14px; border-radius: 8px; font-size: 12.5px; color: #6B7280; cursor: pointer; background: none; border: none; font-family: inherit; }
   .pp .filter-tab.active { background: #DCE9FD; color: #2F6FED; font-weight: 600; }
 
-  .pp table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 460px; }
+  .pp table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 400px; }
   .pp th { text-align: left; font-weight: 500; color: #6B7280; padding: 7px 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid #E5E5E0; }
   .pp th.num, .pp td.num { text-align: right; }
   .pp td { padding: 10px 8px; border-bottom: 1px solid #F1F0EA; }
@@ -84,10 +56,11 @@ const STYLES = `
   .pp .checkbox { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #D1D5DB; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
   .pp .checkbox.checked { background: #2F6FED; border-color: #2F6FED; color: #FFFFFF; font-size: 11px; }
 
-  .pp .btn-primary { width: 100%; height: 40px; background: #2F6FED; color: #FFFFFF; border: none; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; margin-top: 12px; margin-bottom: 16px; font-family: inherit; }
+  .pp .btn-primary { width: 100%; height: 40px; background: #2F6FED; color: #FFFFFF; border: none; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; margin-top: 12px; font-family: inherit; }
   .pp .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .pp .empty-list { font-size: 13px; color: #9CA3AF; padding: 16px 0; }
+  .pp .empty { text-align: center; padding: 30px; color: #9CA3AF; font-size: 13px; }
 
   .pp .app-footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #E5E5E0; font-size: 11.5px; color: #9CA3AF; text-align: center; }
   .pp .app-footer a { color: #9CA3AF; text-decoration: none; }
@@ -104,38 +77,78 @@ const STYLES = `
 `;
 
 export default function StaffPickPack() {
-  const [queue, setQueue] = useState(QUEUE);
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("All");
-  const [selectedOrder, setSelectedOrder] = useState("#10436");
-  const [pickLists, setPickLists] = useState(PICK_LISTS);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [checkedItems, setCheckedItems] = useState({}); // local only: { itemIndex: true/false }
+  const [advancing, setAdvancing] = useState(false);
+
+  const fetchOrders = async () => {
+    try {
+      const token = localStorage.getItem("sf_token");
+      const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/orders", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const queueOrders = res.data.filter((o) => o.status === "Pending" || o.status === "Processing");
+      setOrders(queueOrders);
+      if (queueOrders.length > 0 && !selectedOrder) {
+        setSelectedOrder(queueOrders[0].orderNumber);
+      }
+    } catch (err) {
+      console.error("Failed to fetch orders:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredQueue = useMemo(
-    () => (tab === "All" ? queue : queue.filter((q) => q.status === tab)),
-    [queue, tab]
+    () => (tab === "All" ? orders : orders.filter((o) => o.status === tab)),
+    [orders, tab]
   );
 
-  const currentList = pickLists[selectedOrder] || [];
-  const allChecked = currentList.length > 0 && currentList.every((i) => i.checked);
+  const currentOrder = orders.find((o) => o.orderNumber === selectedOrder);
+  const currentItems = currentOrder?.items || [];
+  const allChecked = currentItems.length > 0 && currentItems.every((_, idx) => checkedItems[idx]);
 
   const toggleItem = (idx) => {
-    setPickLists((prev) => ({
-      ...prev,
-      [selectedOrder]: prev[selectedOrder].map((item, i) =>
-        i === idx ? { ...item, checked: !item.checked } : item
-      ),
-    }));
+    setCheckedItems((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
-  const markPacked = () => {
-    setQueue((prev) =>
-      prev.map((q) => (q.order === selectedOrder ? { ...q, status: "Packing", assigned: "You" } : q))
-    );
-    alert(`${selectedOrder} marked as packed. Wire this up to your fulfillment API.`);
+  const handleSelectOrder = (orderNumber) => {
+    setSelectedOrder(orderNumber);
+    setCheckedItems({});
   };
 
-  const awaitingPick = queue.filter((q) => q.status === "Unassigned").length + queue.filter((q) => q.status === "Picking").length;
-  const inProgress = queue.filter((q) => q.status === "Picking").length;
-  const readyToShip = 12; // static per design; wire to real ship-ready count later
+  const advanceStatus = async () => {
+    if (!currentOrder) return;
+    const nextStatus = currentOrder.status === "Pending" ? "Processing" : "Shipped";
+    setAdvancing(true);
+    try {
+      const token = localStorage.getItem("sf_token");
+      await axios.patch(
+        `https://stockflow-wms-backend.onrender.com/api/orders/${currentOrder.orderNumber}/status`,
+        { status: nextStatus },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setCheckedItems({});
+      setSelectedOrder(null);
+      await fetchOrders();
+    } catch (err) {
+      alert("Failed to update order status.");
+    } finally {
+      setAdvancing(false);
+    }
+  };
+
+  const pendingCount = orders.filter((o) => o.status === "Pending").length;
+  const processingCount = orders.filter((o) => o.status === "Processing").length;
 
   return (
     <DashboardLayout title="Pick & pack" subtitle="Work through today's picking and packing queue.">
@@ -143,10 +156,9 @@ export default function StaffPickPack() {
         <style>{STYLES}</style>
 
         <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Awaiting pick</div><div className="kpi-value">{awaitingPick}</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">In progress</div><div className="kpi-value">{inProgress}</div></div>
-          <div className="kpi-card success"><div className="kpi-label">Ready to ship</div><div className="kpi-value">{readyToShip}</div></div>
-          <div className="kpi-card"><div className="kpi-label">Avg. pick time</div><div className="kpi-value">6.2 min</div></div>
+          <div className="kpi-card"><div className="kpi-label">Awaiting pick</div><div className="kpi-value">{pendingCount}</div></div>
+          <div className="kpi-card warning"><div className="kpi-label">In progress</div><div className="kpi-value">{processingCount}</div></div>
+          <div className="kpi-card success"><div className="kpi-label">Total in queue</div><div className="kpi-value">{orders.length}</div></div>
         </div>
 
         <div className="pick-grid">
@@ -161,58 +173,58 @@ export default function StaffPickPack() {
                 ))}
               </div>
             </div>
-            <table>
-              <thead>
-                <tr><th>Order</th><th>Bin</th><th>Items</th><th>Assigned</th><th className="num">Status</th></tr>
-              </thead>
-              <tbody>
-                {filteredQueue.map((q) => (
-                  <tr
-                    key={q.order}
-                    className={`queue-row${selectedOrder === q.order ? " selected" : ""}`}
-                    onClick={() => setSelectedOrder(q.order)}
-                  >
-                    <td>{q.order}</td>
-                    <td>{q.bin}</td>
-                    <td>{q.items}</td>
-                    <td>{q.assigned}</td>
-                    <td className="num"><span className={`badge ${STATUS_COLOR[q.status]}`}>{q.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {loading ? (
+              <div className="empty">Loading queue…</div>
+            ) : filteredQueue.length === 0 ? (
+              <div className="empty">No orders in this queue right now.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr><th>Order</th><th>Customer</th><th>Items</th><th className="num">Status</th></tr>
+                </thead>
+                <tbody>
+                  {filteredQueue.map((o) => (
+                    <tr
+                      key={o._id}
+                      className={`queue-row${selectedOrder === o.orderNumber ? " selected" : ""}`}
+                      onClick={() => handleSelectOrder(o.orderNumber)}
+                    >
+                      <td>#{o.orderNumber}</td>
+                      <td>{o.customer?.fullName || "Unknown"}</td>
+                      <td>{o.items.length}</td>
+                      <td className="num"><span className={`badge ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <div className="panel">
-            <div className="panel-title" style={{ marginBottom: 12 }}>Order {selectedOrder} — pick list</div>
-            {currentList.length === 0 ? (
-              <div className="empty-list">No pick list available for this order yet.</div>
+            {!currentOrder ? (
+              <div className="empty-list">Select an order from the queue to see its pick list.</div>
             ) : (
-              currentList.map((item, idx) => (
-                <div className="checkbox-row" key={item.label} onClick={() => toggleItem(idx)}>
-                  <div className={`checkbox${item.checked ? " checked" : ""}`}>{item.checked && "✓"}</div>
-                  {item.label}
-                </div>
-              ))
+              <>
+                <div className="panel-title" style={{ marginBottom: 12 }}>Order #{currentOrder.orderNumber} — pick list</div>
+                {currentItems.length === 0 ? (
+                  <div className="empty-list">No items on this order.</div>
+                ) : (
+                  currentItems.map((item, idx) => (
+                    <div className="checkbox-row" key={idx} onClick={() => toggleItem(idx)}>
+                      <div className={`checkbox${checkedItems[idx] ? " checked" : ""}`}>{checkedItems[idx] && "✓"}</div>
+                      {item.name} · SKU {item.sku} · Qty {item.qty}
+                    </div>
+                  ))
+                )}
+                <button className="btn-primary" disabled={!allChecked || advancing} onClick={advanceStatus}>
+                  {advancing
+                    ? "Updating…"
+                    : currentOrder.status === "Pending"
+                    ? "Mark as picked (→ Processing)"
+                    : "Mark as packed (→ Shipped)"}
+                </button>
+              </>
             )}
-            <button className="btn-primary" disabled={!allChecked} onClick={markPacked}>
-              Mark as packed
-            </button>
-
-            <div className="panel-title" style={{ marginBottom: 8 }}>Packing stations</div>
-            <table>
-              <thead>
-                <tr><th>Station</th><th className="num">Status</th></tr>
-              </thead>
-              <tbody>
-                {STATIONS.map((s) => (
-                  <tr key={s.name}>
-                    <td>{s.name}</td>
-                    <td className="num"><span className={`badge ${s.color}`}>{s.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
 
