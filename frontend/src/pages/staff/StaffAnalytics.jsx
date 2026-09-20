@@ -1,17 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
-import ExportModal from "../../components/ExportModal"; // Assuming you saved your modal code here
 import { Chart, registerables } from 'chart.js';
 
 Chart.register(...registerables);
-
-const LEADERBOARD = [
-  { rank: 1, name: "Maria K.", picks: 108, accuracy: "99.6%", time: "5.4 min" },
-  { rank: 2, name: "Priya D.", picks: 96, accuracy: "99.4%", time: "5.8 min" },
-  { rank: 3, name: "You", picks: 91, accuracy: "99.2%", time: "6.1 min", isUser: true },
-  { rank: 4, name: "James O.", picks: 84, accuracy: "98.9%", time: "6.4 min" },
-  { rank: 5, name: "Ravi T.", picks: 79, accuracy: "98.5%", time: "6.9 min" },
-];
 
 const STYLES = `
   .ana-container { font-family: 'Inter', sans-serif; }
@@ -34,18 +26,7 @@ const STYLES = `
 
   .chart-box { position: relative; height: 220px; width: 100%; }
 
-  .leaderboard-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  .leaderboard-table th { text-align: left; padding: 10px; border-bottom: 1px solid #E5E5E0; color: #6B7280; font-size: 12px; text-transform: uppercase; }
-  .leaderboard-table td { padding: 12px 10px; border-bottom: 1px solid #F1F0EA; }
-  .leaderboard-table tr.highlight { background: #F9FBFF; }
-  
-  .btn-export { height: 38px; padding: 0 16px; background: #fff; color: #111827; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-  .btn-export:hover { background: #F9FAFB; }
-  .btn-export svg { width: 16px; height: 16px; }
-
-  .range-tabs { display: flex; gap: 4px; background: #F1F0EA; padding: 4px; border-radius: 8px; }
-  .range-tab { padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: #6B7280; }
-  .range-tab.active { background: #fff; color: #2F6FED; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .empty { text-align: center; padding: 40px; color: #9CA3AF; font-size: 13px; }
 
   @media (max-width: 1024px) {
     .charts-row, .kpi-row { grid-template-columns: 1fr; }
@@ -53,48 +34,81 @@ const STYLES = `
 `;
 
 export default function StaffAnalytics() {
-  const [activeRange, setActiveRange] = useState("30D");
-  const [isExportOpen, setIsExportOpen] = useState(false);
-  
-  const pickedChartRef = useRef(null);
-  const timeChartRef = useRef(null);
-  const pickedInstance = useRef(null);
-  const timeInstance = useRef(null);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const statusChartRef = useRef(null);
+  const trendChartRef = useRef(null);
+  const statusInstance = useRef(null);
+  const trendInstance = useRef(null);
 
   useEffect(() => {
-    // Orders Picked Chart (Bar)
-    if (pickedInstance.current) pickedInstance.current.destroy();
-    pickedInstance.current = new Chart(pickedChartRef.current, {
+    const fetchOrders = async () => {
+      try {
+        const token = localStorage.getItem("sf_token");
+        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/orders", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setOrders(res.data);
+      } catch (err) {
+        console.error("Failed to fetch orders for analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrders();
+  }, []);
+
+  useEffect(() => {
+    if (loading || orders.length === 0) return;
+
+    // Status breakdown (bar)
+    const statusCounts = { Pending: 0, Processing: 0, Shipped: 0, Delivered: 0 };
+    orders.forEach((o) => { if (statusCounts[o.status] !== undefined) statusCounts[o.status]++; });
+
+    if (statusInstance.current) statusInstance.current.destroy();
+    statusInstance.current = new Chart(statusChartRef.current, {
       type: 'bar',
       data: {
-        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        labels: Object.keys(statusCounts),
         datasets: [{
-          label: 'Orders',
-          data: [18, 22, 15, 24, 20, 12],
-          backgroundColor: '#2F6FED',
+          data: Object.values(statusCounts),
+          backgroundColor: ['#9CA3AF', '#E8A93A', '#2F6FED', '#1F9D55'],
           borderRadius: 6,
-          maxBarThickness: 32,
+          maxBarThickness: 40,
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
-        scales: { 
+        scales: {
           y: { beginAtZero: true, grid: { color: '#F1F0EA' } },
           x: { grid: { display: false } }
         }
       }
     });
 
-    // Pick Time Trend (Line)
-    if (timeInstance.current) timeInstance.current.destroy();
-    timeInstance.current = new Chart(timeChartRef.current, {
+    // Orders placed per day, last 7 days (line)
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const trendLabels = [];
+    const trendData = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toDateString();
+      const count = orders.filter((o) => new Date(o.createdAt).toDateString() === dayStr).length;
+      trendLabels.push(dayNames[d.getDay()]);
+      trendData.push(count);
+    }
+
+    if (trendInstance.current) trendInstance.current.destroy();
+    trendInstance.current = new Chart(trendChartRef.current, {
       type: 'line',
       data: {
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+        labels: trendLabels,
         datasets: [{
-          data: [6.8, 6.5, 6.3, 6.1],
+          data: trendData,
           borderColor: '#1F9D55',
           backgroundColor: 'rgba(31,157,85,0.1)',
           fill: true,
@@ -107,118 +121,74 @@ export default function StaffAnalytics() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
-        scales: { 
-          y: { grid: { color: '#F1F0EA' } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: '#F1F0EA' } },
           x: { grid: { display: false } }
         }
       }
     });
 
     return () => {
-      if (pickedInstance.current) pickedInstance.current.destroy();
-      if (timeInstance.current) timeInstance.current.destroy();
+      if (statusInstance.current) statusInstance.current.destroy();
+      if (trendInstance.current) trendInstance.current.destroy();
     };
-  }, [activeRange]);
+  }, [loading, orders]);
+
+  const totalOrders = orders.length;
+  const deliveredCount = orders.filter((o) => o.status === "Delivered").length;
+  const pendingCount = orders.filter((o) => o.status === "Pending" || o.status === "Processing").length;
+  const deliveryRate = totalOrders > 0 ? Math.round((deliveredCount / totalOrders) * 100) : 0;
 
   return (
-    <DashboardLayout 
-      title="My analytics" 
-      subtitle="Your picking performance and accuracy over time."
-      actions={
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div className="range-tabs">
-            {["7D", "30D", "90D"].map(range => (
-              <button 
-                key={range} 
-                className={`range-tab ${activeRange === range ? 'active' : ''}`}
-                onClick={() => setActiveRange(range)}
-              >
-                {range}
-              </button>
-            ))}
-          </div>
-          <button className="btn-export" onClick={() => setIsExportOpen(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-            <span>Export data</span>
-          </button>
-        </div>
-      }
+    <DashboardLayout
+      title="Team analytics"
+      subtitle="Order fulfillment activity across the warehouse."
     >
       <div className="ana-container">
         <style>{STYLES}</style>
 
-        {/* Export Modal Integration */}
-        <ExportModal 
-          open={isExportOpen} 
-          onClose={() => setIsExportOpen(false)}
-          title="Export analytics"
-          subtitle="Download your performance data as a structured file."
-          includeItems={["Pick performance stats", "Leaderboard standing", "Daily charts"]}
-          filePrefix="my-analytics"
-        />
-
-        <div className="kpi-row">
-          <div className="kpi-card">
-            <div className="kpi-label">Orders picked ({activeRange})</div>
-            <div className="kpi-value">412</div>
-          </div>
-          <div className="kpi-card success">
-            <div className="kpi-label">Accuracy rate</div>
-            <div className="kpi-value">99.2%</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Avg. pick time</div>
-            <div className="kpi-value">6.1 min</div>
-          </div>
-          <div className="kpi-card warning">
-            <div className="kpi-label">Team rank</div>
-            <div className="kpi-value">#3 of 12</div>
-          </div>
-        </div>
-
-        <div className="charts-row">
-          <div className="panel">
-            <div className="panel-title">Orders picked per day</div>
-            <div className="chart-box">
-              <canvas ref={pickedChartRef}></canvas>
+        {loading ? (
+          <div className="empty">Loading analytics…</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <div className="kpi-card">
+                <div className="kpi-label">Total orders</div>
+                <div className="kpi-value">{totalOrders}</div>
+              </div>
+              <div className="kpi-card warning">
+                <div className="kpi-label">Awaiting fulfillment</div>
+                <div className="kpi-value">{pendingCount}</div>
+              </div>
+              <div className="kpi-card success">
+                <div className="kpi-label">Delivered</div>
+                <div className="kpi-value">{deliveredCount}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-label">Delivery rate</div>
+                <div className="kpi-value">{deliveryRate}%</div>
+              </div>
             </div>
-          </div>
-          <div className="panel">
-            <div className="panel-title">Avg. pick time trend (min)</div>
-            <div className="chart-box">
-              <canvas ref={timeChartRef}></canvas>
-            </div>
-          </div>
-        </div>
 
-        <div className="panel">
-          <div className="panel-title">Zone B team leaderboard (this week)</div>
-          <table className="leaderboard-table">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Staff</th>
-                <th>Orders picked</th>
-                <th>Accuracy</th>
-                <th style={{ textAlign: 'right' }}>Avg time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {LEADERBOARD.map((item) => (
-                <tr key={item.rank} className={item.isUser ? 'highlight' : ''}>
-                  <td style={{ fontWeight: 600 }}>{item.rank}</td>
-                  <td style={{ fontWeight: item.isUser ? 700 : 400 }}>{item.name}</td>
-                  <td>{item.picks}</td>
-                  <td>{item.accuracy}</td>
-                  <td style={{ textAlign: 'right' }}>{item.time}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            <div className="charts-row">
+              <div className="panel">
+                <div className="panel-title">Orders placed (last 7 days)</div>
+                <div className="chart-box">
+                  <canvas ref={trendChartRef}></canvas>
+                </div>
+              </div>
+              <div className="panel">
+                <div className="panel-title">Orders by status</div>
+                <div className="chart-box">
+                  <canvas ref={statusChartRef}></canvas>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         <div style={{ padding: "40px 0 20px", textAlign: "center", fontSize: "12px", color: "#9CA3AF" }}>
-          &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Privacy Policy</a>
+          &copy; 2026 StockFlow WMS. All rights reserved.
         </div>
       </div>
     </DashboardLayout>

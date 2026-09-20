@@ -1,113 +1,19 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const INITIAL_NOTIFICATIONS = [
-  {
-    id: 1,
-    type: "assignment",
-    category: "assigned",
-    message: "You've been assigned to pick",
-    highlight: "Order #10436",
-    time: "12 min ago",
-    unread: true,
-    iconColor: "notif-blue",
-  },
-  {
-    id: 2,
-    type: "alert",
-    category: "alerts",
-    message: "Low stock: Pallet wrap 20\" in bin C-11 — 3 left",
-    highlight: "",
-    time: "40 min ago",
-    unread: true,
-    iconColor: "notif-amber",
-  },
-  {
-    id: 3,
-    type: "update",
-    category: "all",
-    message: "Your stock update on Barcode scanner X200 was approved",
-    highlight: "",
-    time: "1 hr ago",
-    unread: false,
-    iconColor: "notif-green",
-  },
-  {
-    id: 4,
-    type: "reminder",
-    category: "all",
-    message: "Shift reminder: Zone B closes for stock count at 3:30 PM",
-    highlight: "",
-    time: "2 hr ago",
-    unread: true,
-    iconColor: "notif-blue",
-  },
-  {
-    id: 5,
-    type: "alert",
-    category: "alerts",
-    message: "Low stock: Shipping labels in bin A-06 — 8 left",
-    highlight: "",
-    time: "Yesterday",
-    unread: true,
-    iconColor: "notif-amber",
-  },
-  {
-    id: 6,
-    type: "update",
-    category: "all",
-    message: "Order #10435 marked as shipped",
-    highlight: "",
-    time: "Yesterday",
-    unread: false,
-    iconColor: "notif-green",
-  },
-  {
-    id: 7,
-    type: "alert",
-    category: "alerts",
-    message: "Low stock: Stretch film dispenser in bin B-07 — 6 left",
-    highlight: "",
-    time: "2 days ago",
-    unread: false,
-    iconColor: "notif-amber",
-  },
-  {
-    id: 8,
-    type: "assignment",
-    category: "assigned",
-    message: "You were assigned to pack",
-    highlight: "Order #10439",
-    time: "2 days ago",
-    unread: false,
-    iconColor: "notif-blue",
-  },
+const CATEGORY_TABS = [
+  ["all", "All"],
+  ["inventory", "Stock alerts"],
+  ["orders", "Orders"],
 ];
 
-const ICONS = {
-  assignment: (
-    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-    </svg>
-  ),
-  alert: (
-    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  ),
-  update: (
-    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  ),
-  reminder: (
-    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  ),
+const ICON_MAP = {
+  inventory: { bg: "#FAEEDA", stroke: "#854F0B", d: "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" },
+  orders: { bg: "#EFF4FF", stroke: "#2F6FED", d: "M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" },
+  users: { bg: "#EAF6EE", stroke: "#1F9D55", d: "M20 6 9 17 4 12" },
+  system: { bg: "#F1F0EA", stroke: "#6B7280", d: "M9 12l2 2 4-4M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0z" },
 };
 
 const STYLES = `
@@ -126,19 +32,17 @@ const STYLES = `
   .filter-tab.active { background: #DCE9FD; color: #2F6FED; font-weight: 600; }
 
   .panel { background: #FFFFFF; border: 1px solid #E5E5E0; border-radius: 12px; overflow: hidden; }
-  .notif-row { display: flex; gap: 14px; padding: 16px 20px; border-bottom: 1px solid #F1F0EA; align-items: flex-start; transition: background 0.2s; }
+  .notif-row { display: flex; gap: 14px; padding: 16px 20px; border-bottom: 1px solid #F1F0EA; align-items: flex-start; transition: background 0.2s; cursor: pointer; }
   .notif-row:last-child { border-bottom: none; }
   .notif-row:hover { background: #FAFAFA; }
   
   .notif-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .notif-icon svg { width: 18px; height: 18px; }
-  
-  .notif-blue { background: #EFF4FF; stroke: #2F6FED; }
-  .notif-amber { background: #FAEEDA; stroke: #854F0B; }
-  .notif-green { background: #EAF6EE; stroke: #1F9D55; }
 
   .notif-content { flex: 1; min-width: 0; }
   .notif-text { font-size: 14px; color: #374151; line-height: 1.4; }
+  .notif-text.unread { font-weight: 600; color: #111827; }
+  .notif-desc { font-size: 13px; color: #6B7280; margin-top: 3px; line-height: 1.4; }
   .notif-time { font-size: 12px; color: #9CA3AF; margin-top: 4px; }
   
   .unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #2F6FED; margin-top: 6px; flex-shrink: 0; }
@@ -146,36 +50,89 @@ const STYLES = `
   .mark-read-btn { background: none; border: none; color: #2F6FED; font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
   .mark-read-btn:hover { background: #DCE9FD; }
 
+  .empty { padding: 40px; text-align: center; color: #6B7280; }
+
   @media (max-width: 768px) {
     .kpi-row { grid-template-columns: 1fr; }
     .filter-tabs { overflow-x: auto; white-space: nowrap; }
   }
 `;
 
-export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+function timeAgo(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} minute${mins > 1 ? "s" : ""} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  return `${days} days ago`;
+}
+
+export default function StaffNotifications() {
+  const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("all");
 
-  // Logic to filter notifications
-  const filteredNotifications = useMemo(() => {
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const token = localStorage.getItem("sf_token");
+        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/notifications", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNotifications(res.data);
+      } catch (err) {
+        console.error("Failed to fetch notifications:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNotifications();
+  }, []);
+
+  const filtered = useMemo(() => {
     if (activeFilter === "all") return notifications;
     return notifications.filter((n) => n.category === activeFilter);
   }, [activeFilter, notifications]);
 
-  // Handle Mark All as Read
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, unread: false })));
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem("sf_token");
+      await axios.patch("https://stockflow-wms-backend.onrender.com/api/notifications/read-all", {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
+    }
   };
 
-  // KPIs derived from state
+  const markRead = async (n) => {
+    if (n.unread) {
+      try {
+        const token = localStorage.getItem("sf_token");
+        await axios.patch(`https://stockflow-wms-backend.onrender.com/api/notifications/${n._id}/read`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNotifications((prev) => prev.map((x) => (x._id === n._id ? { ...x, unread: false } : x)));
+      } catch (err) {
+        console.error("Failed to mark as read:", err);
+      }
+    }
+    if (n.link) navigate(n.link);
+  };
+
   const unreadCount = notifications.filter((n) => n.unread).length;
-  const assignedCount = notifications.filter((n) => n.category === "assigned").length;
-  const alertCount = notifications.filter((n) => n.category === "alerts").length;
+  const alertCount = notifications.filter((n) => n.category === "inventory").length;
+  const orderCount = notifications.filter((n) => n.category === "orders").length;
 
   return (
-    <DashboardLayout 
-      title="Notifications" 
-      subtitle="Updates assigned to you and Zone B alerts."
+    <DashboardLayout
+      title="Notifications"
+      subtitle="Stock alerts and order activity across the warehouse."
       actions={
         <button className="mark-read-btn" onClick={markAllAsRead}>
           Mark all as read
@@ -185,65 +142,57 @@ export default function NotificationsPage() {
       <div className="notif-container">
         <style>{STYLES}</style>
 
-        {/* KPI Section */}
         <div className="kpi-row">
           <div className="kpi-card">
             <div className="kpi-label">Unread</div>
             <div className="kpi-value">{unreadCount}</div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Assigned to you</div>
-            <div className="kpi-value">{assignedCount}</div>
-          </div>
           <div className="kpi-card warning">
-            <div className="kpi-label">Active alerts</div>
+            <div className="kpi-label">Stock alerts</div>
             <div className="kpi-value">{alertCount}</div>
           </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Order updates</div>
+            <div className="kpi-value">{orderCount}</div>
+          </div>
         </div>
 
-        {/* Filter Tabs */}
         <div className="filter-tabs">
-          <button 
-            className={`filter-tab ${activeFilter === "all" ? "active" : ""}`}
-            onClick={() => setActiveFilter("all")}
-          >
-            All
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === "assigned" ? "active" : ""}`}
-            onClick={() => setActiveFilter("assigned")}
-          >
-            Assigned to me
-          </button>
-          <button 
-            className={`filter-tab ${activeFilter === "alerts" ? "active" : ""}`}
-            onClick={() => setActiveFilter("alerts")}
-          >
-            Alerts
-          </button>
+          {CATEGORY_TABS.map(([key, label]) => (
+            <button
+              key={key}
+              className={`filter-tab ${activeFilter === key ? "active" : ""}`}
+              onClick={() => setActiveFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* Notifications List */}
         <div className="panel">
-          {filteredNotifications.length > 0 ? (
-            filteredNotifications.map((n) => (
-              <div key={n.id} className="notif-row">
-                <div className={`notif-icon ${n.iconColor}`}>
-                  {ICONS[n.type]}
-                </div>
-                <div className="notif-content">
-                  <div className="notif-text">
-                    {n.message} {n.highlight && <strong>{n.highlight}</strong>}
-                  </div>
-                  <div className="notif-time">{n.time}</div>
-                </div>
-                {n.unread && <div className="unread-dot"></div>}
-              </div>
-            ))
+          {loading ? (
+            <div className="empty">Loading notifications…</div>
+          ) : filtered.length === 0 ? (
+            <div className="empty">No notifications found in this category.</div>
           ) : (
-            <div style={{ padding: "40px", textAlign: "center", color: "#6B7280" }}>
-              No notifications found in this category.
-            </div>
+            filtered.map((n) => {
+              const icon = ICON_MAP[n.category] || ICON_MAP.system;
+              return (
+                <div key={n._id} className="notif-row" onClick={() => markRead(n)}>
+                  <div className="notif-icon" style={{ background: icon.bg }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke={icon.stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={icon.d} />
+                    </svg>
+                  </div>
+                  <div className="notif-content">
+                    <div className={`notif-text${n.unread ? " unread" : ""}`}>{n.title}</div>
+                    {n.description && <div className="notif-desc">{n.description}</div>}
+                    <div className="notif-time">{timeAgo(n.createdAt)}</div>
+                  </div>
+                  {n.unread && <div className="unread-dot"></div>}
+                </div>
+              );
+            })
           )}
         </div>
 
