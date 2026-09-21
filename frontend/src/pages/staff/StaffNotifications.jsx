@@ -3,12 +3,6 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const CATEGORY_TABS = [
-  ["all", "All"],
-  ["inventory", "Stock alerts"],
-  ["orders", "Orders"],
-];
-
 const ICON_MAP = {
   inventory: { bg: "#FAEEDA", stroke: "#854F0B", d: "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" },
   orders: { bg: "#EFF4FF", stroke: "#2F6FED", d: "M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" },
@@ -95,7 +89,10 @@ export default function StaffNotifications() {
 
   const filtered = useMemo(() => {
     if (activeFilter === "all") return notifications;
-    return notifications.filter((n) => n.category === activeFilter);
+    if (activeFilter === "assigned") return []; // No order-assignment system exists yet
+    if (activeFilter === "alerts") return notifications.filter((n) => n.category === "inventory");
+    if (activeFilter === "archived") return notifications.filter((n) => !n.unread);
+    return notifications;
   }, [activeFilter, notifications]);
 
   const markAllAsRead = async () => {
@@ -127,7 +124,6 @@ export default function StaffNotifications() {
 
   const unreadCount = notifications.filter((n) => n.unread).length;
   const alertCount = notifications.filter((n) => n.category === "inventory").length;
-  const orderCount = notifications.filter((n) => n.category === "orders").length;
 
   return (
     <DashboardLayout
@@ -147,31 +143,28 @@ export default function StaffNotifications() {
             <div className="kpi-label">Unread</div>
             <div className="kpi-value">{unreadCount}</div>
           </div>
-          <div className="kpi-card warning">
-            <div className="kpi-label">Stock alerts</div>
-            <div className="kpi-value">{alertCount}</div>
-          </div>
           <div className="kpi-card">
-            <div className="kpi-label">Order updates</div>
-            <div className="kpi-value">{orderCount}</div>
+            <div className="kpi-label">Assigned to you</div>
+            <div className="kpi-value">0</div>
+          </div>
+          <div className="kpi-card warning">
+            <div className="kpi-label">Active alerts</div>
+            <div className="kpi-value">{alertCount}</div>
           </div>
         </div>
 
         <div className="filter-tabs">
-          {CATEGORY_TABS.map(([key, label]) => (
-            <button
-              key={key}
-              className={`filter-tab ${activeFilter === key ? "active" : ""}`}
-              onClick={() => setActiveFilter(key)}
-            >
-              {label}
-            </button>
-          ))}
+          <button className={`filter-tab ${activeFilter === "all" ? "active" : ""}`} onClick={() => setActiveFilter("all")}>All</button>
+          <button className={`filter-tab ${activeFilter === "assigned" ? "active" : ""}`} onClick={() => setActiveFilter("assigned")}>Assigned to me</button>
+          <button className={`filter-tab ${activeFilter === "alerts" ? "active" : ""}`} onClick={() => setActiveFilter("alerts")}>Alerts</button>
+          <button className={`filter-tab ${activeFilter === "archived" ? "active" : ""}`} onClick={() => setActiveFilter("archived")}>Archived</button>
         </div>
 
         <div className="panel">
           {loading ? (
             <div className="empty">Loading notifications…</div>
+          ) : activeFilter === "assigned" ? (
+            <div className="empty">Task assignment isn't set up yet — no orders are currently linked to individual staff.</div>
           ) : filtered.length === 0 ? (
             <div className="empty">No notifications found in this category.</div>
           ) : (

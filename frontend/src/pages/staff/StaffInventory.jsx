@@ -2,12 +2,10 @@ import React, { useState, useMemo, useEffect } from "react";
 import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const CATEGORIES = ["All", "Packaging", "Electronics", "Apparel", "Low stock"];
-
-const BADGE_CLASS = {
-  "Low stock": "amber",
-  "In stock": "green",
-  "Out of stock": "red",
+const ACTION_MAP = {
+  "In stock": { label: "Matches", color: "green" },
+  "Low stock": { label: "Recount", color: "amber" },
+  "Out of stock": { label: "Flagged", color: "red" },
 };
 
 const STYLES = `
@@ -63,7 +61,7 @@ export default function StaffInventory() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("All");
+  const [zone, setZone] = useState("All bins");
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -82,36 +80,35 @@ export default function StaffInventory() {
     fetchProducts();
   }, []);
 
+  // Real warehouse locations, derived from actual product data (no fake "Zone A/B/C")
+  const zones = useMemo(() => {
+    const unique = Array.from(new Set(products.map((p) => p.warehouseLocation).filter(Boolean)));
+    return ["All bins", ...unique];
+  }, [products]);
+
   const filtered = useMemo(() => {
     return products.filter((p) => {
+      const matchesZone = zone === "All bins" || p.warehouseLocation === zone;
       const matchesQuery =
         p.name.toLowerCase().includes(query.toLowerCase()) ||
-        p.sku.toLowerCase().includes(query.toLowerCase()) ||
         (p.binLocation || "").toLowerCase().includes(query.toLowerCase());
-      const matchesCategory =
-        category === "All"
-          ? true
-          : category === "Low stock"
-          ? p.status === "Low stock" || p.status === "Out of stock"
-          : p.category === category;
-      return matchesQuery && matchesCategory;
+      return matchesZone && matchesQuery;
     });
-  }, [query, category, products]);
+  }, [products, query, zone]);
 
-  const totalSkus = products.length;
   const flaggedCount = products.filter((p) => p.status === "Out of stock").length;
-  const lowStockCount = products.filter((p) => p.status === "Low stock").length;
+  const recountCount = products.filter((p) => p.status === "Low stock").length;
 
   return (
-    <DashboardLayout title="Inventory" subtitle="Live stock levels across all warehouse bins.">
+    <DashboardLayout title="Inventory" subtitle="Live stock levels · read access, request recounts as needed.">
       <div className="si">
         <style>{STYLES}</style>
 
         <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Total SKUs</div><div className="kpi-value">{totalSkus}</div></div>
-          <div className="kpi-card danger"><div className="kpi-label">Out of stock</div><div className="kpi-value">{flaggedCount}</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Low stock</div><div className="kpi-value">{lowStockCount}</div></div>
-          <div className="kpi-card"><div className="kpi-label">In stock</div><div className="kpi-value">{totalSkus - flaggedCount - lowStockCount}</div></div>
+          <div className="kpi-card"><div className="kpi-label">Total SKUs</div><div className="kpi-value">{products.length}</div></div>
+          <div className="kpi-card danger"><div className="kpi-label">Discrepancies flagged</div><div className="kpi-value">{flaggedCount}</div></div>
+          <div className="kpi-card warning"><div className="kpi-label">Pending recounts</div><div className="kpi-value">{recountCount}</div></div>
+          <div className="kpi-card"><div className="kpi-label">In stock</div><div className="kpi-value">{products.length - flaggedCount - recountCount}</div></div>
         </div>
 
         <div className="toolbar">
@@ -119,12 +116,12 @@ export default function StaffInventory() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input placeholder="Search by product, SKU, or bin…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input placeholder="Search by product or bin…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <div className="filter-tabs">
-            {CATEGORIES.map((c) => (
-              <button key={c} className={`filter-tab${category === c ? " active" : ""}`} onClick={() => setCategory(c)}>
-                {c}
+            {zones.map((z) => (
+              <button key={z} className={`filter-tab${zone === z ? " active" : ""}`} onClick={() => setZone(z)}>
+                {z}
               </button>
             ))}
           </div>
@@ -138,18 +135,21 @@ export default function StaffInventory() {
           ) : (
             <table>
               <thead>
-                <tr><th>Product</th><th>SKU</th><th>Bin</th><th>Stock</th><th className="num">Status</th></tr>
+                <tr><th>Product</th><th>Bin</th><th>Reorder level</th><th>In stock</th><th className="num">Action</th></tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
-                  <tr key={p._id}>
-                    <td>{p.name}</td>
-                    <td>{p.sku}</td>
-                    <td>{p.binLocation || "—"}</td>
-                    <td>{p.quantity}</td>
-                    <td className="num"><span className={`badge ${BADGE_CLASS[p.status]}`}>{p.status}</span></td>
-                  </tr>
-                ))}
+                {filtered.map((p) => {
+                  const action = ACTION_MAP[p.status] || ACTION_MAP["In stock"];
+                  return (
+                    <tr key={p._id}>
+                      <td>{p.name}</td>
+                      <td>{p.binLocation || "—"}</td>
+                      <td>{p.reorderLevel}</td>
+                      <td>{p.quantity}</td>
+                      <td className="num"><span className={`badge ${action.color}`}>{action.label}</span></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
