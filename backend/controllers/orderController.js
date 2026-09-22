@@ -25,6 +25,18 @@ exports.getOrderByNumber = async (req, res) => {
     }
 };
 
+// GET orders belonging to the logged-in customer
+exports.getMyOrders = async (req, res) => {
+    try {
+        const orders = await Order.find({ customer: req.user.id })
+            .populate('customer', 'fullName email')
+            .sort({ createdAt: -1 });
+        res.status(200).json(orders);
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
+
 // CREATE new order (admin/staff)
 exports.createOrder = async (req, res) => {
     try {

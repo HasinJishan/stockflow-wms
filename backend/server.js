@@ -29,6 +29,8 @@ app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/stock-adjustments', require('./routes/stockAdjustmentRoutes'));
+app.use('/api/addresses', require('./routes/addressRoutes'));
+
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)
