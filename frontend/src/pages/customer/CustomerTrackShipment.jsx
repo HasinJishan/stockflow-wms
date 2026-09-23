@@ -1,13 +1,12 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import DashboardLayout from "../../components/DashboardLayout";
 
-const SHIPMENTS = [
-  { id: "#10432", carrier: "BlueDart", tracking: "BD84920133IN", items: 3, status: "Out for delivery", type: "blue" },
-  { id: "#10425", carrier: "Delhivery", tracking: "DL10293841IN", items: 2, status: "In transit", type: "amber" },
-  { id: "#10418", carrier: "BlueDart", tracking: "BD84811902IN", items: 1, status: "In transit", type: "amber" },
-  { id: "#10401", carrier: "Delhivery", tracking: "DL10281123IN", items: 1, status: "Delivered", type: "green" },
-  { id: "#10388", carrier: "BlueDart", tracking: "BD84790112IN", items: 5, status: "Delivered", type: "green" },
-];
+const STEPS = ["Pending", "Processing", "Shipped", "Delivered"];
+const STEP_LABELS = ["Order placed", "Processing", "Shipped", "Delivered"];
+
+const BADGE_MAP = { Pending: "gray", Processing: "amber", Shipped: "blue", Delivered: "green" };
 
 const STYLES = `
   .track * { box-sizing: border-box; }
@@ -22,14 +21,15 @@ const STYLES = `
 
   .track .track-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
   .track .panel { background: #FFFFFF; border: 1px solid #E5E5E0; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-  .track .panel-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;}
-  
+  .track .panel-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+
   .track .badge { font-size: 12px; padding: 4px 12px; border-radius: 8px; font-weight: 600; display: inline-block; }
   .track .badge.blue { background: #DCE9FD; color: #2F6FED; }
   .track .badge.amber { background: #FAEEDA; color: #854F0B; }
   .track .badge.green { background: #EAF6EE; color: #1F9D55; }
+  .track .badge.gray { background: #F1F0EA; color: #6B7280; }
 
-  .track .track-timeline { display: flex; align-items: flex-start; padding: 10px 0; margin-top: 10px;}
+  .track .track-timeline { display: flex; align-items: flex-start; padding: 10px 0; margin-top: 10px; }
   .track .track-step { flex: 1; text-align: center; position: relative; }
   .track .track-dot { width: 28px; height: 28px; border-radius: 50%; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 14px; position: relative; z-index: 1; }
   .track .track-dot.pending { background: #E5E5E0; color: #9CA3AF; }
@@ -40,8 +40,11 @@ const STYLES = `
   .track .track-time { font-size: 11px; color: #9CA3AF; margin-top: 4px; }
 
   .track table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  .track th { text-align: left; font-weight: 500; color: #6B7280; padding: 8px; font-size: 12px; border-bottom: 1px solid #E5E5E0; text-transform: uppercase;}
-  .track td { padding: 12px 8px; border-bottom: 1px solid #F1F0EA; }
+  .track th { text-align: left; font-weight: 500; color: #6B7280; padding: 8px; font-size: 12px; border-bottom: 1px solid #E5E5E0; text-transform: uppercase; }
+  .track td { padding: 12px 8px; border-bottom: 1px solid #F1F0EA; cursor: pointer; }
+  .track tr:hover td { background: #FAFBFF; }
+
+  .track .empty { text-align: center; padding: 30px; color: #9CA3AF; font-size: 13px; }
 
   @media (max-width: 1024px) {
     .track .track-grid { grid-template-columns: 1fr; }
@@ -53,92 +56,135 @@ const STYLES = `
 `;
 
 export default function CustomerTrackShipment() {
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const token = localStorage.getItem("sf_token");
+        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/orders/my-orders", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setOrders(res.data);
+        const active = res.data.find((o) => o.status !== "Delivered") || res.data[0];
+        setSelectedOrder(active || null);
+      } catch (err) {
+        console.error("Failed to fetch orders:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrders();
+  }, []);
+
+  const activeShipments = orders.filter((o) => o.status !== "Delivered").length;
+  const outForDelivery = orders.filter((o) => o.status === "Shipped").length;
+  const thisMonth = new Date().getMonth();
+  const deliveredThisMonth = orders.filter(
+    (o) => o.status === "Delivered" && new Date(o.updatedAt).getMonth() === thisMonth
+  ).length;
+
+  const stepIndex = selectedOrder ? STEPS.indexOf(selectedOrder.status) : -1;
+
   return (
-    <DashboardLayout title="Track shipment" subtitle="Follow your orders from warehouse to doorstep.">
+    <DashboardLayout title="Track shipment" subtitle="Follow your orders from placement to delivery.">
       <div className="track">
         <style>{STYLES}</style>
-        
-        <div className="kpi-row">
-          <div className="kpi-card"><div className="kpi-label">Active shipments</div><div className="kpi-value">3</div></div>
-          <div className="kpi-card warning"><div className="kpi-label">Out for delivery</div><div className="kpi-value">1</div></div>
-          <div className="kpi-card success"><div className="kpi-label">Delivered this month</div><div className="kpi-value">9</div></div>
-        </div>
 
-        <div className="track-grid">
-          <div>
-            <div className="panel">
-              <div className="panel-title">
-                Order #10432
-                <span className="badge blue">Out for delivery</span>
+        {loading ? (
+          <div className="empty">Loading shipments…</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <div className="kpi-card"><div className="kpi-label">Active shipments</div><div className="kpi-value">{activeShipments}</div></div>
+              <div className="kpi-card warning"><div className="kpi-label">Shipped / in transit</div><div className="kpi-value">{outForDelivery}</div></div>
+              <div className="kpi-card success"><div className="kpi-label">Delivered this month</div><div className="kpi-value">{deliveredThisMonth}</div></div>
+            </div>
+
+            <div className="track-grid">
+              <div>
+                <div className="panel">
+                  {!selectedOrder ? (
+                    <div className="empty">You have no orders to track yet.</div>
+                  ) : (
+                    <>
+                      <div className="panel-title">
+                        Order #{selectedOrder.orderNumber}
+                        <span className={`badge ${BADGE_MAP[selectedOrder.status]}`}>{selectedOrder.status}</span>
+                      </div>
+                      <div className="track-timeline">
+                        {STEP_LABELS.map((label, idx) => (
+                          <div className="track-step" key={label}>
+                            {idx > 0 && <div className={`track-line${idx > stepIndex ? " pending" : ""}`}></div>}
+                            <div className={`track-dot${idx > stepIndex ? " pending" : ""}`}>
+                              {idx <= stepIndex ? "✓" : idx + 1}
+                            </div>
+                            <div>
+                              <div className="track-label" style={idx > stepIndex ? { color: "#9CA3AF" } : {}}>{label}</div>
+                              <div className="track-time">
+                                {idx === 0
+                                  ? new Date(selectedOrder.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                                  : idx === stepIndex
+                                  ? new Date(selectedOrder.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                                  : idx < stepIndex
+                                  ? "Completed"
+                                  : "Pending"}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="panel">
+                  <div className="panel-title">All orders</div>
+                  {orders.length === 0 ? (
+                    <div className="empty">No orders yet.</div>
+                  ) : (
+                    <table>
+                      <thead>
+                        <tr><th>Order</th><th>Items</th><th>Placed</th><th style={{ textAlign: "right" }}>Status</th></tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((o) => (
+                          <tr key={o._id} onClick={() => setSelectedOrder(o)}>
+                            <td>#{o.orderNumber}</td>
+                            <td>{o.items.length}</td>
+                            <td>{new Date(o.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</td>
+                            <td style={{ textAlign: "right" }}><span className={`badge ${BADGE_MAP[o.status]}`}>{o.status}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
-              <div className="track-timeline">
-                <div className="track-step">
-                  <div className="track-dot">✓</div>
-                  <div><div className="track-label">Order placed</div><div className="track-time">Jul 24, 9:02 AM</div></div>
-                </div>
-                <div className="track-step">
-                  <div className="track-line"></div>
-                  <div className="track-dot">✓</div>
-                  <div><div className="track-label">Packed</div><div className="track-time">Jul 24, 2:14 PM</div></div>
-                </div>
-                <div className="track-step">
-                  <div className="track-line"></div>
-                  <div className="track-dot">✓</div>
-                  <div><div className="track-label">Shipped</div><div className="track-time">Jul 25, 8:30 AM</div></div>
-                </div>
-                <div className="track-step">
-                  <div className="track-line"></div>
-                  <div className="track-dot">✓</div>
-                  <div><div className="track-label">Out for delivery</div><div className="track-time">Today, 8:15 AM</div></div>
-                </div>
-                <div className="track-step">
-                  <div className="track-line pending"></div>
-                  <div className="track-dot pending">5</div>
-                  <div><div className="track-label" style={{color: '#9CA3AF'}}>Delivered</div><div className="track-time">Expected today</div></div>
+
+              <div>
+                <div className="panel" style={{ background: "#2F6FED", color: "#fff", border: "none" }}>
+                  <div className="panel-title" style={{ color: "#fff" }}>Need help?</div>
+                  <p style={{ fontSize: 13, opacity: 0.9, marginBottom: 15 }}>
+                    Issue with a delivery, or a status that isn't updating?
+                  </p>
+                  <button
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "none", background: "#fff", color: "#2F6FED", cursor: "pointer", fontWeight: 700 }}
+                    onClick={() => navigate("/customer/help")}
+                  >
+                    Contact support
+                  </button>
                 </div>
               </div>
             </div>
+          </>
+        )}
 
-            <div className="panel">
-              <div className="panel-title">All shipments</div>
-              <table>
-                <thead>
-                  <tr><th>Order</th><th>Carrier</th><th>Tracking ID</th><th style={{textAlign:'right'}}>Status</th></tr>
-                </thead>
-                <tbody>
-                  {SHIPMENTS.map(s => (
-                    <tr key={s.id}>
-                      <td>{s.id}</td>
-                      <td>{s.carrier}</td>
-                      <td style={{fontFamily: 'monospace'}}>{s.tracking}</td>
-                      <td style={{textAlign:'right'}}><span className={`badge ${s.type}`}>{s.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div>
-            <div className="panel">
-              <div className="panel-title">Delivery instructions</div>
-              <p style={{fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 15}}>
-                "Leave with security guard if not home. Ring the bell twice."
-              </p>
-              <button style={{width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #D1D5DB', background: '#fff', cursor: 'pointer', fontWeight: 600}}>
-                Edit instructions
-              </button>
-            </div>
-            <div className="panel" style={{background: '#2F6FED', color: '#fff', border: 'none'}}>
-              <div className="panel-title" style={{color: '#fff'}}>Need help?</div>
-              <p style={{fontSize: 13, opacity: 0.9, marginBottom: 15}}>
-                Issue with a delivery or tracking number not updating?
-              </p>
-              <button style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: '#fff', color: '#2F6FED', cursor: 'pointer', fontWeight: 700}}>
-                Contact support
-              </button>
-            </div>
-          </div>
+        <div style={{ marginTop: "40px", textAlign: "center", fontSize: "11px", color: "#9CA3AF" }}>
+          &copy; 2026 StockFlow WMS. All rights reserved. · Privacy Policy · Terms of Service
         </div>
       </div>
     </DashboardLayout>

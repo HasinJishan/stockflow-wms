@@ -30,7 +30,7 @@ app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/stock-adjustments', require('./routes/stockAdjustmentRoutes'));
 app.use('/api/addresses', require('./routes/addressRoutes'));
-
+app.use('/api/saved-items', require('./routes/savedItemRoutes'));
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)
