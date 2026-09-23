@@ -84,23 +84,32 @@ export default function CustomerDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const token = localStorage.getItem("sf_token");
-        const [ordersRes, addressesRes] = await Promise.all([
-          axios.get("https://stockflow-wms-backend.onrender.com/api/orders/my-orders", {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          axios.get("https://stockflow-wms-backend.onrender.com/api/addresses", {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-        ]);
-        setOrders(ordersRes.data);
-        setAddresses(addressesRes.data);
-      } catch (err) {
-        console.error("Failed to load dashboard:", err);
-      } finally {
-        setLoading(false);
+      const token = localStorage.getItem("sf_token");
+
+      // Use allSettled instead of all: if one request fails, the other
+      // should still populate state instead of both being discarded.
+      const [ordersResult, addressesResult] = await Promise.allSettled([
+        axios.get("https://stockflow-wms-backend.onrender.com/api/orders/my-orders", {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get("https://stockflow-wms-backend.onrender.com/api/addresses", {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      if (ordersResult.status === "fulfilled") {
+        setOrders(ordersResult.value.data);
+      } else {
+        console.error("Failed to load orders:", ordersResult.reason);
       }
+
+      if (addressesResult.status === "fulfilled") {
+        setAddresses(addressesResult.value.data);
+      } else {
+        console.error("Failed to load addresses:", addressesResult.reason);
+      }
+
+      setLoading(false);
     };
     fetchData();
   }, []);
