@@ -150,6 +150,14 @@ const SIDEBAR_ROLE_LABEL = {
   staff: "Warehouse Staff · Zone B",
 };
 
+// Fallback notification route per role, used when the sidebar nav for this
+// role doesn't include an explicit "Notifications" entry (e.g. customer).
+const DEFAULT_NOTIF_PATH = {
+  admin: "/admin/notifications",
+  staff: "/staff/notifications",
+  customer: "/customer/notifications",
+};
+
 const STYLES = `
   .dl * { box-sizing: border-box; }
   .dl { min-height: 100vh; background: #FAFAF8; font-family: 'Inter', sans-serif; color: #111827; display: grid; grid-template-columns: 240px 1fr; }
@@ -259,21 +267,35 @@ export default function DashboardLayout({ title, subtitle, breadcrumb, actions, 
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const items = NAV_BY_ROLE[user?.role] || [];
-  const notifPath = items.find(([label]) => label === "Notifications")?.[1] || "/admin/notifications";
-    const initials = (user?.name || "??").slice(0, 2).toUpperCase();
+  const notifPath =
+    items.find(([label]) => label === "Notifications")?.[1] ||
+    DEFAULT_NOTIF_PATH[user?.role] ||
+    "/admin/notifications";
+  const initials = (user?.name || "??").slice(0, 2).toUpperCase();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (user?.role !== "admin" && user?.role !== "staff") return;
+    if (user?.role !== "admin" && user?.role !== "staff" && user?.role !== "customer") return;
 
     const fetchUnreadCount = async () => {
       try {
         const token = localStorage.getItem('sf_token');
-        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const count = res.data.filter((n) => n.unread).length;
-        setUnreadCount(count);
+
+        if (user?.role === "customer") {
+          // Customers don't use the admin/staff notification feed. Instead,
+          // show a real, honest count: their number of non-delivered orders.
+          const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/orders/my-orders', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const activeCount = res.data.filter((o) => o.status !== "Delivered").length;
+          setUnreadCount(activeCount);
+        } else {
+          const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const count = res.data.filter((n) => n.unread).length;
+          setUnreadCount(count);
+        }
       } catch (err) {
         console.error("Failed to fetch unread notification count:", err);
       }
@@ -346,7 +368,7 @@ export default function DashboardLayout({ title, subtitle, breadcrumb, actions, 
 
           <div className="topbar-right">
             {actions}
-            {(user?.role === "admin" || user?.role === "staff") && (
+            {(user?.role === "admin" || user?.role === "staff" || user?.role === "customer") && (
               <button className="bell" aria-label="Notifications" onClick={() => navigate(notifPath)}>
                 <Icon stroke="#4B5563">
                   <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
