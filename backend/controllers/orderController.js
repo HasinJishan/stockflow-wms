@@ -13,7 +13,7 @@ exports.getAllOrders = async (req, res) => {
     }
 };
 
-// GET single order by order number
+// GET single order by order number (admin/staff)
 exports.getOrderByNumber = async (req, res) => {
     try {
         const order = await Order.findOne({ orderNumber: req.params.orderNumber })
@@ -37,7 +37,7 @@ exports.getMyOrders = async (req, res) => {
     }
 };
 
-// CREATE new order (admin/staff)
+// CREATE new order (admin/staff, on behalf of a customer)
 exports.createOrder = async (req, res) => {
     try {
         const { customer, items, shippingMethod, deliveryAddress, paymentMethod, notes } = req.body;
@@ -64,7 +64,6 @@ exports.createOrder = async (req, res) => {
             notes
         });
 
-        // Notify admins of the new order
         try {
             await createNotification({
                 category: 'orders',
@@ -77,6 +76,50 @@ exports.createOrder = async (req, res) => {
         }
 
         res.status(201).json({ message: "Order created successfully", order });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
+
+// CREATE new order placed by the logged-in customer themselves
+exports.createMyOrder = async (req, res) => {
+    try {
+        const { items, shippingMethod, deliveryAddress, paymentMethod, notes } = req.body;
+
+        if (!items || items.length === 0 || !deliveryAddress) {
+            return res.status(400).json({ message: "Items and delivery address are required" });
+        }
+
+        const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const shippingCost = shippingMethod === 'Express' ? 15.0 : 8.0;
+        const tax = +(subtotal * 0.064).toFixed(2);
+        const total = +(subtotal + shippingCost + tax).toFixed(2);
+
+        const order = await Order.create({
+            customer: req.user.id,
+            items,
+            subtotal,
+            shippingCost,
+            tax,
+            total,
+            shippingMethod,
+            deliveryAddress,
+            paymentMethod,
+            notes
+        });
+
+        try {
+            await createNotification({
+                category: 'orders',
+                title: `New order #${order.orderNumber}`,
+                description: `Order placed for $${order.total.toFixed(2)}.`,
+                link: `/admin/orders/${order.orderNumber}`
+            });
+        } catch (notifyError) {
+            console.error("⚠️ Failed to create order notification:", notifyError.message);
+        }
+
+        res.status(201).json({ message: "Order placed successfully", order });
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });
     }
