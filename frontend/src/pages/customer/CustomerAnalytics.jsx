@@ -277,7 +277,7 @@ export default function CustomerAnalytics() {
         )}
 
         <div style={{ marginTop: "40px", textAlign: "center", fontSize: "11px", color: "#9CA3AF" }}>
-          &copy; 2026 StockFlow WMS. All rights reserved.
+         &copy; 2026 StockFlow WMS. All rights reserved. · Privacy Policy · Terms of Service
         </div>
       </div>
     </DashboardLayout>

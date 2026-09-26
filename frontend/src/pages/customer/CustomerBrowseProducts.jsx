@@ -4,29 +4,16 @@ import axios from "axios";
 import { Heart } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useCart } from "../../context/CartContext";
-import { useAuth } from "../../context/AuthContext";
 import { getProductImage } from "../../assets/productImages";
-
-// Same storage pattern as notifications: no dedicated backend for saved
-// items yet, so we persist to localStorage. If you build a real
-// Saved Items page later, read/write this same key so both stay in sync.
-const SAVED_STORAGE_KEY = "sf_saved_items";
-
-function loadSavedIds() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) || "[]"));
-  } catch {
-    return new Set();
-  }
-}
-
-function saveSavedIds(idSet) {
-  localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...idSet]));
-}
 
 const STYLES = `
   .bp * { box-sizing: border-box; }
-  .bp { font-family: 'Inter', sans-serif; }
+  .bp {
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 128px); /* keeps footer pinned to bottom even with few/no products */
+  }
 
   .bp .search-input {
     width: 100%; padding: 14px 20px; border-radius: 12px; border: 1px solid #D1D5DB;
@@ -40,6 +27,8 @@ const STYLES = `
   }
   .bp .cat-btn.active { background: #2F6FED; border-color: #2F6FED; color: #fff; }
 
+  .bp .content-area { flex: 1; } /* grows to fill space, pushing footer down */
+
   .bp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
 
   .bp .card { background: #fff; border: 1px solid #E5E5E0; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
@@ -52,6 +41,7 @@ const STYLES = `
     background: #fff; border: 1px solid #E5E5E0; display: flex; align-items: center; justify-content: center;
     cursor: pointer; padding: 0;
   }
+  .bp .save-btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
   .bp .card-body { padding: 16px; display: flex; flex-direction: column; flex: 1; }
   .bp .category { font-size: 11.5px; color: #2F6FED; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -67,35 +57,35 @@ const STYLES = `
     font-weight: 600; font-size: 13.5px; cursor: pointer; font-family: inherit;
   }
 
-  .bp .empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #6B7280; }
+  .bp .empty { text-align: center; padding: 60px 20px; color: #6B7280; grid-column: 1 / -1; }
   .bp .pager { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }
   .bp .pager-btn { padding: 7px 13px; border-radius: 8px; border: 1px solid #D1D5DB; background: #fff; color: #374151; font-weight: 600; font-size: 12.5px; cursor: pointer; font-family: inherit; }
   .bp .pager-btn.active { background: #2F6FED; border-color: #2F6FED; color: #fff; }
   .bp .pager-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .bp .app-footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12.5px; color: #9CA3AF; text-align: center; }
+  .bp .app-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12.5px; color: #9CA3AF; text-align: center; }
 `;
 
 export default function CustomerBrowseProducts() {
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { user } = useAuth();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [page, setPage] = useState(1);
-  const [savedIds, setSavedIds] = useState(loadSavedIds);
+  const [savedIds, setSavedIds] = useState(new Set());
+  const [savingId, setSavingId] = useState(null); // prevents double-clicks mid-request
   const perPage = 8;
+
+  const token = localStorage.getItem("sf_token");
+  const authHeader = { headers: { Authorization: `Bearer ${token}` } };
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const token = localStorage.getItem("sf_token");
-        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/products", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/products", authHeader);
         setProducts(res.data);
       } catch (err) {
         console.error("Failed to fetch products:", err);
@@ -103,7 +93,20 @@ export default function CustomerBrowseProducts() {
         setLoading(false);
       }
     };
+
+    const fetchSavedIds = async () => {
+      try {
+        const res = await axios.get("https://stockflow-wms-backend.onrender.com/api/saved-items", authHeader);
+        // The saved-items API returns each product's own fields spread in,
+        // so _id here is the product's id (matches what's used elsewhere).
+        setSavedIds(new Set(res.data.map((item) => item._id)));
+      } catch (err) {
+        console.error("Failed to fetch saved items:", err);
+      }
+    };
+
     fetchProducts();
+    fetchSavedIds();
   }, []);
 
   const categories = ["All", ...new Set(products.map((p) => p.category))];
@@ -130,15 +133,30 @@ export default function CustomerBrowseProducts() {
     navigate("/customer/checkout");
   };
 
-  const toggleSaved = (e, productId) => {
+  const toggleSaved = async (e, productId) => {
     e.stopPropagation();
-    setSavedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId);
-      else next.add(productId);
-      saveSavedIds(next);
-      return next;
-    });
+    if (savingId === productId) return; // request already in flight for this item
+    setSavingId(productId);
+
+    const alreadySaved = savedIds.has(productId);
+
+    try {
+      if (alreadySaved) {
+        await axios.delete(`https://stockflow-wms-backend.onrender.com/api/saved-items/${productId}`, authHeader);
+        setSavedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(productId);
+          return next;
+        });
+      } else {
+        await axios.post("https://stockflow-wms-backend.onrender.com/api/saved-items", { productId }, authHeader);
+        setSavedIds((prev) => new Set(prev).add(productId));
+      }
+    } catch (err) {
+      console.error("Failed to update saved item:", err);
+    } finally {
+      setSavingId(null);
+    }
   };
 
   const stockBadge = (status) => {
@@ -172,81 +190,84 @@ export default function CustomerBrowseProducts() {
           ))}
         </div>
 
-        {loading ? (
-          <div className="empty">Loading products…</div>
-        ) : (
-          <>
-            <div className="grid">
-              {pagedProducts.length > 0 ? (
-                pagedProducts.map((p) => {
-                  const badge = stockBadge(p.status);
-                  const isSaved = savedIds.has(p._id);
-                  return (
-                    <div key={p._id} className="card">
-                      <div className="img-wrap">
-                        <img src={getProductImage(p)} alt={p.name} />
-                        <button
-                          className="save-btn"
-                          onClick={(e) => toggleSaved(e, p._id)}
-                          aria-label={isSaved ? "Remove from saved items" : "Save item"}
-                          title={isSaved ? "Remove from saved items" : "Save item"}
-                        >
-                          <Heart size={15} fill={isSaved ? "#2F6FED" : "none"} color={isSaved ? "#2F6FED" : "#6B7280"} />
-                        </button>
-                      </div>
-
-                      <div className="card-body">
-                        <span className="category">{p.category}</span>
-                        <h3 className="name">{p.name}</h3>
-                        <span className="sku">SKU: {p.sku}</span>
-
-                        <div className="price-row">
-                          <span className="price">${p.price.toFixed(2)}</span>
-                          <span className="badge" style={{ backgroundColor: badge.bg, color: badge.color }}>
-                            {p.status === "In stock" ? "In stock" : p.status === "Low stock" ? `${p.quantity} left` : "Out of stock"}
-                          </span>
+        <div className="content-area">
+          {loading ? (
+            <div className="empty">Loading products…</div>
+          ) : (
+            <>
+              <div className="grid">
+                {pagedProducts.length > 0 ? (
+                  pagedProducts.map((p) => {
+                    const badge = stockBadge(p.status);
+                    const isSaved = savedIds.has(p._id);
+                    return (
+                      <div key={p._id} className="card">
+                        <div className="img-wrap">
+                          <img src={getProductImage(p)} alt={p.name} />
+                          <button
+                            className="save-btn"
+                            onClick={(e) => toggleSaved(e, p._id)}
+                            disabled={savingId === p._id}
+                            aria-label={isSaved ? "Remove from saved items" : "Save item"}
+                            title={isSaved ? "Remove from saved items" : "Save item"}
+                          >
+                            <Heart size={15} fill={isSaved ? "#2F6FED" : "none"} color={isSaved ? "#2F6FED" : "#6B7280"} />
+                          </button>
                         </div>
 
-                        <button
-                          className="add-btn"
-                          onClick={() => handleAddToCart(p)}
-                          disabled={p.status === "Out of stock"}
-                          style={{
-                            background: p.status === "Out of stock" ? "#9CA3AF" : "#2F6FED",
-                            color: "#fff",
-                            cursor: p.status === "Out of stock" ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          {p.status === "Out of stock" ? "Out of stock" : "Add to Cart"}
-                        </button>
+                        <div className="card-body">
+                          <span className="category">{p.category}</span>
+                          <h3 className="name">{p.name}</h3>
+                          <span className="sku">SKU: {p.sku}</span>
+
+                          <div className="price-row">
+                            <span className="price">${p.price.toFixed(2)}</span>
+                            <span className="badge" style={{ backgroundColor: badge.bg, color: badge.color }}>
+                              {p.status === "In stock" ? "In stock" : p.status === "Low stock" ? `${p.quantity} left` : "Out of stock"}
+                            </span>
+                          </div>
+
+                          <button
+                            className="add-btn"
+                            onClick={() => handleAddToCart(p)}
+                            disabled={p.status === "Out of stock"}
+                            style={{
+                              background: p.status === "Out of stock" ? "#9CA3AF" : "#2F6FED",
+                              color: "#fff",
+                              cursor: p.status === "Out of stock" ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {p.status === "Out of stock" ? "Out of stock" : "Add to Cart"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="empty">
-                  <h3 style={{ fontSize: "17px", marginBottom: "8px" }}>No items found matching your search.</h3>
-                  <button
-                    onClick={() => { setSearchQuery(""); setActiveCategory("All"); }}
-                    style={{ color: "#2F6FED", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}
-                  >
-                    Clear filters
-                  </button>
+                    );
+                  })
+                ) : (
+                  <div className="empty">
+                    <h3 style={{ fontSize: "17px", marginBottom: "8px" }}>No items found matching your search.</h3>
+                    <button
+                      onClick={() => { setSearchQuery(""); setActiveCategory("All"); }}
+                      style={{ color: "#2F6FED", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="pager">
+                  <button className="pager-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                    <button key={n} className={`pager-btn${page === n ? " active" : ""}`} onClick={() => setPage(n)}>{n}</button>
+                  ))}
+                  <button className="pager-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</button>
                 </div>
               )}
-            </div>
-
-            {totalPages > 1 && (
-              <div className="pager">
-                <button className="pager-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                  <button key={n} className={`pager-btn${page === n ? " active" : ""}`} onClick={() => setPage(n)}>{n}</button>
-                ))}
-                <button className="pager-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</button>
-              </div>
-            )}
-          </>
-        )}
+            </>
+          )}
+        </div>
 
         <div className="app-footer">
           &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer" style={{ color: "#9CA3AF" }}>Privacy Policy</a> &middot; <a href="#footer" style={{ color: "#9CA3AF" }}>Terms of Service</a>
