@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import axios from "axios";
 import { Package, Truck, CheckCircle, Clock } from "lucide-react";
@@ -52,6 +53,7 @@ function timeAgo(dateStr) {
 
 export default function CustomerNotifications() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("All");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,12 +111,12 @@ export default function CustomerNotifications() {
     });
   };
 
- const handleAvatarClick = () => {
+ const handleLogout = () => {
     if (window.confirm("Log out of StockFlow WMS?")) {
       logout();
-      navigate("/login");   // ← this is missing in CustomerNotifications.jsx
+      navigate("/login");
     }
-};
+  };
 
   const filtered = activeTab === "All" ? notifications : notifications.filter((n) => n.category === activeTab);
 
