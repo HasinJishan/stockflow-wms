@@ -109,11 +109,12 @@ export default function CustomerNotifications() {
     });
   };
 
-  const handleLogout = () => {
+ const handleAvatarClick = () => {
     if (window.confirm("Log out of StockFlow WMS?")) {
       logout();
+      navigate("/login");   // ← this is missing in CustomerNotifications.jsx
     }
-  };
+};
 
   const filtered = activeTab === "All" ? notifications : notifications.filter((n) => n.category === activeTab);
 
