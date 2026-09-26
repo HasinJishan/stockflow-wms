@@ -24,6 +24,20 @@ const STATUS_DESC = {
   Delivered: (o) => `Your order was delivered. We hope you enjoy it!`,
 };
 
+const READ_STORAGE_KEY = "sf_read_notifications";
+
+function loadReadIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(READ_STORAGE_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveReadIds(idSet) {
+  localStorage.setItem(READ_STORAGE_KEY, JSON.stringify([...idSet]));
+}
+
 function timeAgo(dateStr) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -41,7 +55,9 @@ export default function CustomerNotifications() {
   const [activeTab, setActiveTab] = useState("All");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [readIds, setReadIds] = useState(new Set());
+  // Initialize from localStorage so read state survives navigation/reload,
+  // instead of resetting every time this component mounts.
+  const [readIds, setReadIds] = useState(loadReadIds);
 
   const initials = (user?.name || "PR").slice(0, 2).toUpperCase();
 
@@ -79,7 +95,18 @@ export default function CustomerNotifications() {
   ];
 
   const handleMarkAllRead = () => {
-    setReadIds(new Set(orders.map((o) => o._id)));
+    const allIds = new Set(orders.map((o) => o._id));
+    setReadIds(allIds);
+    saveReadIds(allIds);
+  };
+
+  const handleMarkOneRead = (id) => {
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      saveReadIds(next);
+      return next;
+    });
   };
 
   const handleLogout = () => {
@@ -149,7 +176,11 @@ export default function CustomerNotifications() {
             </div>
           ) : (
             filtered.map((notif) => (
-              <div key={notif.id} style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px 24px", borderBottom: "1px solid #F1F0EA" }}>
+              <div
+                key={notif.id}
+                onClick={() => !notif.isRead && handleMarkOneRead(notif.id)}
+                style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px 24px", borderBottom: "1px solid #F1F0EA", cursor: notif.isRead ? "default" : "pointer" }}
+              >
                 <div style={{ width: "40px", height: "40px", borderRadius: "8px", backgroundColor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1px solid #E5E5E0" }}>
                   {notif.icon}
                 </div>

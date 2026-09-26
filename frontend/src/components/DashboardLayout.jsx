@@ -158,6 +158,10 @@ const DEFAULT_NOTIF_PATH = {
   customer: "/customer/notifications",
 };
 
+// Must match the key used in CustomerNotifications.jsx so the bell and the
+// notifications page stay in sync on what's been read.
+const READ_STORAGE_KEY = "sf_read_notifications";
+
 const STYLES = `
   .dl * { box-sizing: border-box; }
   .dl { min-height: 100vh; background: #FAFAF8; font-family: 'Inter', sans-serif; color: #111827; display: grid; grid-template-columns: 240px 1fr; }
@@ -281,16 +285,25 @@ export default function DashboardLayout({ title, subtitle, breadcrumb, actions, 
       try {
         const token = localStorage.getItem('sf_token');
 
-        // All roles now read from the same real notifications feed, so that
-        // "mark as read" on the notifications page actually clears this dot.
-        // (Previously customers used a synthetic "active orders" count that
-        // had no connection to the notifications page, so marking things as
-        // read there never changed the bell.)
-        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const count = res.data.filter((n) => n.unread).length;
-        setUnreadCount(count);
+        if (user?.role === "customer") {
+          // Customers don't have a dedicated notifications backend — their
+          // notifications are derived from their orders (one per order,
+          // reflecting current status), same as CustomerNotifications.jsx.
+          // Read state is persisted in localStorage under READ_STORAGE_KEY
+          // so this bell count stays in sync with what's been read there.
+          const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/orders/my-orders', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const readIds = JSON.parse(localStorage.getItem(READ_STORAGE_KEY) || '[]');
+          const unread = res.data.filter((o) => !readIds.includes(o._id)).length;
+          setUnreadCount(unread);
+        } else {
+          const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const count = res.data.filter((n) => n.unread).length;
+          setUnreadCount(count);
+        }
       } catch (err) {
         console.error("Failed to fetch unread notification count:", err);
       }
