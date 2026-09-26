@@ -6,9 +6,11 @@ const STYLES = `
   .addr-wrapper {
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 128px); /* pins footer to bottom even with few/no addresses */
+    flex: 1;
+    min-height: 0;
   }
   .addr-content-area { flex: 1; } /* grows to fill space, pushing footer down */
+  .addr-footer { margin-top: auto; text-align: center; padding: 24px 0; font-size: 12px; color: #9CA3AF; }
 
   .panel { background: #FFFFFF; border: 1px solid #E5E5E0; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
   .panel-title { font-size: 14px; font-weight: 700; margin-bottom: 20px; color: #111827; }
@@ -69,8 +71,6 @@ const STYLES = `
   .btn-save { background: #2F6FED; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
   .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-cancel { background: #fff; border: 1px solid #E5E5E0; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
-
-  .addr-footer { margin-top: auto; text-align: center; padding: 24px 0; font-size: 12px; color: #9CA3AF; }
 `;
 
 const emptyForm = {

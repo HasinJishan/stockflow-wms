@@ -60,12 +60,12 @@ const login = async ({ email, password }) => {
     throw new Error(errorMsg);
   }
 };
-
-  const logout = () => {
+const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.clear();
-  };
+    localStorage.removeItem("sf_user");
+    localStorage.removeItem("sf_token");
+};
 
   // Immediately reflect profile changes (name/email) everywhere without needing to log out/in
   const updateUser = (updates) => {

@@ -12,7 +12,8 @@ const STYLES = `
     font-family: 'Inter', sans-serif;
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 128px); /* keeps footer pinned to bottom even with few/no products */
+    flex: 1;
+    min-height: 0;
   }
 
   .bp .search-input {

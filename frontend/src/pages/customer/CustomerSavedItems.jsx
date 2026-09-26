@@ -8,6 +8,9 @@ const STYLES = `
   .csi * { box-sizing: border-box; }
   .csi { font-family: 'Inter', sans-serif; color: #111827; }
 
+  .csi-wrapper { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .csi-footer { margin-top: auto; text-align: center; padding-top: 16px; font-size: 11px; color: #9CA3AF; }
+
   .csi .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
   .csi .kpi-card { padding: 20px; border-radius: 12px; background: #F3F2EC; border: 1px solid #E5E5E0; }
   .csi .kpi-card.green { background: #EAF6EE; border-color: #D1E7DD; }
@@ -117,77 +120,78 @@ export default function CustomerSavedItems() {
     <DashboardLayout title="Saved items" subtitle="Products you've bookmarked for later.">
       <div className="csi">
         <style>{STYLES}</style>
-
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <span className="kpi-label">Saved items</span>
-            <div className="kpi-value">{items.length}</div>
-          </div>
-          <div className="kpi-card green">
-            <span className="kpi-label">In stock</span>
-            <div className="kpi-value">{inStockItems.length}</div>
-          </div>
-          <div className="kpi-card tan">
-            <span className="kpi-label">Out of stock</span>
-            <div className="kpi-value">{outOfStockCount}</div>
-          </div>
-        </div>
-
-        <div className="main-layout">
-          <div className="item-container">
-            {loading ? (
-              <div className="empty">Loading saved items…</div>
-            ) : items.length === 0 ? (
-              <div className="empty">
-                No saved items yet. Browse the catalog and save products you like for later.
-              </div>
-            ) : (
-              items.map((item) => (
-                <div key={item._id} className="item-row">
-                  <div className="item-icon">
-                    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                      <line x1="8" y1="21" x2="16" y2="21" />
-                      <line x1="12" y1="17" x2="12" y2="21" />
-                    </svg>
-                  </div>
-                  <div className="item-details">
-                    <div className="item-name">{item.name}</div>
-                    <div className="item-sub">
-                      SKU: {item.sku} ·{" "}
-                      <span className={`stock-status ${item.status === "Out of stock" ? "red" : ""}`}>{item.status}</span>
-                    </div>
-                  </div>
-                  <div className="item-price">${item.price.toFixed(2)}</div>
-                  <div className="btn-group">
-                    {item.status === "Out of stock" ? (
-                      <button className="btn-notify" disabled>Out of stock</button>
-                    ) : (
-                      <button className="btn-outline" onClick={() => handleAddToCart(item)}>Add to cart</button>
-                    )}
-                    <button className="btn-remove" onClick={() => handleRemove(item._id)}>Remove</button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="sidebar-col">
-            <div className="panel">
-              <h3 className="panel-title">List total</h3>
-              <div className="total-row">
-                <span className="total-label">{inStockItems.length} in-stock items</span>
-                <span className="total-value">${listTotal.toFixed(2)}</span>
-              </div>
-              <button className="btn-primary" onClick={handleAddAllToCart} disabled={inStockItems.length === 0}>
-                Add all to cart
-              </button>
+        <div className="csi-wrapper">
+          <div className="kpi-grid">
+            <div className="kpi-card">
+              <span className="kpi-label">Saved items</span>
+              <div className="kpi-value">{items.length}</div>
+            </div>
+            <div className="kpi-card green">
+              <span className="kpi-label">In stock</span>
+              <div className="kpi-value">{inStockItems.length}</div>
+            </div>
+            <div className="kpi-card tan">
+              <span className="kpi-label">Out of stock</span>
+              <div className="kpi-value">{outOfStockCount}</div>
             </div>
           </div>
-        </div>
 
-        <div style={{ marginTop: "40px", textAlign: "center", fontSize: "11px", color: "#9CA3AF" }}>
-          &copy; 2026 StockFlow WMS. All rights reserved. · Privacy Policy · Terms of Service
+          <div className="main-layout">
+            <div className="item-container">
+              {loading ? (
+                <div className="empty">Loading saved items…</div>
+              ) : items.length === 0 ? (
+                <div className="empty">
+                  No saved items yet. Browse the catalog and save products you like for later.
+                </div>
+              ) : (
+                items.map((item) => (
+                  <div key={item._id} className="item-row">
+                    <div className="item-icon">
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
+                      </svg>
+                    </div>
+                    <div className="item-details">
+                      <div className="item-name">{item.name}</div>
+                      <div className="item-sub">
+                        SKU: {item.sku} ·{" "}
+                        <span className={`stock-status ${item.status === "Out of stock" ? "red" : ""}`}>{item.status}</span>
+                      </div>
+                    </div>
+                    <div className="item-price">${item.price.toFixed(2)}</div>
+                    <div className="btn-group">
+                      {item.status === "Out of stock" ? (
+                        <button className="btn-notify" disabled>Out of stock</button>
+                      ) : (
+                        <button className="btn-outline" onClick={() => handleAddToCart(item)}>Add to cart</button>
+                      )}
+                      <button className="btn-remove" onClick={() => handleRemove(item._id)}>Remove</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="sidebar-col">
+              <div className="panel">
+                <h3 className="panel-title">List total</h3>
+                <div className="total-row">
+                  <span className="total-label">{inStockItems.length} in-stock items</span>
+                  <span className="total-value">${listTotal.toFixed(2)}</span>
+                </div>
+                <button className="btn-primary" onClick={handleAddAllToCart} disabled={inStockItems.length === 0}>
+                  Add all to cart
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="csi-footer">
+            &copy; 2026 StockFlow WMS. All rights reserved. · Privacy Policy · Terms of Service
+          </div>
         </div>
       </div>
     </DashboardLayout>

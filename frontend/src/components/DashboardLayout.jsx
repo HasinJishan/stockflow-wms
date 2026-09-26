@@ -197,7 +197,8 @@ const STYLES = `
   .dl .side-toggle:hover { background: #EDEBE4; }
   .dl.collapsed .side-toggle svg { transform: rotate(180deg); }
 
-  .dl .main { padding: 32px 40px; min-width: 0; }
+  .dl .main { padding: 32px 40px; min-width: 0; display: flex; flex-direction: column; }
+  .dl .content-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
   .dl .breadcrumb { font-size: 13px; color: #9CA3AF; margin-bottom: 8px; }
   .dl .breadcrumb a { color: #2F6FED; text-decoration: none; }
   .dl .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
@@ -389,7 +390,7 @@ export default function DashboardLayout({ title, subtitle, breadcrumb, actions, 
           </div>
         </div>
 
-        {children}
+        <div className="content-wrap">{children}</div>
       </div>
     </div>
   );
