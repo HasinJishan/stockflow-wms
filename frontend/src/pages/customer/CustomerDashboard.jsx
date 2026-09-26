@@ -61,7 +61,7 @@ const STYLES = `
 
   .cd .empty { text-align: center; padding: 30px; color: #9CA3AF; font-size: 13.5px; }
 
-  .cd .app-footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid #E5E5E0; font-size: 12.5px; color: #9CA3AF; text-align: center; }
+ .cd .app-footer { margin-top: 24px; padding-top: 18px; font-size: 12.5px; color: #9CA3AF; text-align: center; }
   .cd .app-footer a { color: #9CA3AF; text-decoration: none; }
 
   @media (max-width: 1100px) {
