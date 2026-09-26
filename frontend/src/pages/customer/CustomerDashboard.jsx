@@ -247,7 +247,7 @@ export default function CustomerDashboard() {
         )}
 
         <div className="app-footer">
-          &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer">Privacy Policy</a> &middot; <a href="#footer">Terms of Service</a>
+          &copy; 2026 StockFlow WMS. All rights reserved. · Privacy Policy · Terms of Service
         </div>
       </div>
     </DashboardLayout>
