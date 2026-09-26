@@ -281,21 +281,16 @@ export default function DashboardLayout({ title, subtitle, breadcrumb, actions, 
       try {
         const token = localStorage.getItem('sf_token');
 
-        if (user?.role === "customer") {
-          // Customers don't use the admin/staff notification feed. Instead,
-          // show a real, honest count: their number of non-delivered orders.
-          const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/orders/my-orders', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const activeCount = res.data.filter((o) => o.status !== "Delivered").length;
-          setUnreadCount(activeCount);
-        } else {
-          const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const count = res.data.filter((n) => n.unread).length;
-          setUnreadCount(count);
-        }
+        // All roles now read from the same real notifications feed, so that
+        // "mark as read" on the notifications page actually clears this dot.
+        // (Previously customers used a synthetic "active orders" count that
+        // had no connection to the notifications page, so marking things as
+        // read there never changed the bell.)
+        const res = await axios.get('https://stockflow-wms-backend.onrender.com/api/notifications', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const count = res.data.filter((n) => n.unread).length;
+        setUnreadCount(count);
       } catch (err) {
         console.error("Failed to fetch unread notification count:", err);
       }
