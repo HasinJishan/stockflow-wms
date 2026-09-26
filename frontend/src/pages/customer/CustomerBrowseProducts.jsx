@@ -1,24 +1,93 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { Heart } from "lucide-react";
+import DashboardLayout from "../../components/DashboardLayout";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
-import { Bell } from "lucide-react";
 import { getProductImage } from "../../assets/productImages";
+
+// Same storage pattern as notifications: no dedicated backend for saved
+// items yet, so we persist to localStorage. If you build a real
+// Saved Items page later, read/write this same key so both stay in sync.
+const SAVED_STORAGE_KEY = "sf_saved_items";
+
+function loadSavedIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSavedIds(idSet) {
+  localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...idSet]));
+}
+
+const STYLES = `
+  .bp * { box-sizing: border-box; }
+  .bp { font-family: 'Inter', sans-serif; }
+
+  .bp .search-input {
+    width: 100%; padding: 14px 20px; border-radius: 12px; border: 1px solid #D1D5DB;
+    font-size: 14.5px; outline: none; font-family: inherit; background: #fff;
+  }
+
+  .bp .cat-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
+  .bp .cat-btn {
+    padding: 8px 16px; border-radius: 10px; border: 1px solid #D1D5DB; font-weight: 600;
+    cursor: pointer; font-size: 13px; background: #fff; color: #374151; font-family: inherit;
+  }
+  .bp .cat-btn.active { background: #2F6FED; border-color: #2F6FED; color: #fff; }
+
+  .bp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+
+  .bp .card { background: #fff; border: 1px solid #E5E5E0; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+
+  .bp .img-wrap { height: 150px; background: #F8FAFC; display: flex; align-items: center; justify-content: center; padding: 14px; position: relative; border-bottom: 1px solid #F1F0EA; }
+  .bp .img-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+  .bp .save-btn {
+    position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%;
+    background: #fff; border: 1px solid #E5E5E0; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0;
+  }
+
+  .bp .card-body { padding: 16px; display: flex; flex-direction: column; flex: 1; }
+  .bp .category { font-size: 11.5px; color: #2F6FED; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .bp .name { font-size: 14.5px; font-weight: 700; margin: 4px 0 2px; color: #111827; line-height: 1.3; }
+  .bp .sku { font-size: 12px; color: #9CA3AF; }
+
+  .bp .price-row { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 12px; }
+  .bp .price { font-size: 17px; font-weight: 700; color: #111827; }
+  .bp .badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; }
+
+  .bp .add-btn {
+    width: 100%; margin-top: 12px; padding: 11px; border: none; border-radius: 10px;
+    font-weight: 600; font-size: 13.5px; cursor: pointer; font-family: inherit;
+  }
+
+  .bp .empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #6B7280; }
+  .bp .pager { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }
+  .bp .pager-btn { padding: 7px 13px; border-radius: 8px; border: 1px solid #D1D5DB; background: #fff; color: #374151; font-weight: 600; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+  .bp .pager-btn.active { background: #2F6FED; border-color: #2F6FED; color: #fff; }
+  .bp .pager-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .bp .app-footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid #E5E5E0; font-size: 12.5px; color: #9CA3AF; text-align: center; }
+`;
 
 export default function CustomerBrowseProducts() {
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [page, setPage] = useState(1);
+  const [savedIds, setSavedIds] = useState(loadSavedIds);
   const perPage = 8;
-
-  const userInitials = (user?.name || "PR").slice(0, 2).toUpperCase();
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -36,12 +105,6 @@ export default function CustomerBrowseProducts() {
     };
     fetchProducts();
   }, []);
-
-  const handleLogout = () => {
-    if (window.confirm("Log out of your account?")) {
-      logout();
-    }
-  };
 
   const categories = ["All", ...new Set(products.map((p) => p.category))];
 
@@ -67,6 +130,17 @@ export default function CustomerBrowseProducts() {
     navigate("/customer/checkout");
   };
 
+  const toggleSaved = (e, productId) => {
+    e.stopPropagation();
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      saveSavedIds(next);
+      return next;
+    });
+  };
+
   const stockBadge = (status) => {
     if (status === "Out of stock") return { bg: "#fee2e2", color: "#991b1b" };
     if (status === "Low stock") return { bg: "#fef3c7", color: "#92400e" };
@@ -74,152 +148,110 @@ export default function CustomerBrowseProducts() {
   };
 
   return (
-    <div style={{ padding: "40px", backgroundColor: "#FAFAF8", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ maxWidth: "1400px", margin: "0 auto 40px auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-          <div>
-            <h1 style={{ fontSize: "32px", fontWeight: "800", color: "#111827", margin: 0 }}>Browse Products</h1>
-            <p style={{ fontSize: "14px", color: "#6B7280", margin: "4px 0 0 0" }}>Explore equipment, packaging, and safety supplies.</p>
-          </div>
+    <DashboardLayout title="Browse Products" subtitle="Explore equipment, packaging, and safety supplies.">
+      <div className="bp">
+        <style>{STYLES}</style>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <button
-              onClick={() => navigate("/customer/notifications")}
-              title="Notifications"
-              style={{ position: "relative", background: "transparent", border: "none", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center", justifyContent: "center" }}
-            >
-              <Bell size={26} color="#334155" strokeWidth={1.8} />
-            </button>
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search by SKU or Name..."
+          value={searchQuery}
+          onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+        />
 
+        <div className="cat-row">
+          {categories.map((cat) => (
             <button
-              onClick={handleLogout}
-              title={`Logged in as ${user?.name || "User"}. Click to logout.`}
-              style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#DCE9FD", color: "#2563EB", border: "2px solid #ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "14px", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
+              key={cat}
+              className={`cat-btn${activeCategory === cat ? " active" : ""}`}
+              onClick={() => { setActiveCategory(cat); setPage(1); }}
             >
-              {userInitials}
+              {cat}
             </button>
-          </div>
+          ))}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <input
-            type="text"
-            placeholder="Search by SKU or Name..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-            style={{ width: "100%", padding: "16px 24px", borderRadius: "15px", border: "1px solid #d1d5db", fontSize: "16px", outline: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", boxSizing: "border-box" }}
-          />
-
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => { setActiveCategory(cat); setPage(1); }}
-                style={{
-                  padding: "10px 20px", borderRadius: "12px", border: "1px solid #d1d5db", fontWeight: "600", cursor: "pointer", fontSize: "14px",
-                  backgroundColor: activeCategory === cat ? "#2563eb" : "#fff",
-                  color: activeCategory === cat ? "#fff" : "#374151",
-                  transition: "0.2s all",
-                }}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "100px", color: "#6b7280" }}>Loading products…</div>
-      ) : (
-        <>
-          <div style={{ maxWidth: "1400px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "30px" }}>
-            {pagedProducts.length > 0 ? (
-              pagedProducts.map((p) => {
-                const badge = stockBadge(p.status);
-                return (
-                  <div key={p._id} style={{ background: "#fff", borderRadius: "24px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" }}>
-                    <div style={{ height: "260px", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", padding: "25px", borderBottom: "1px solid #f1f5f9" }}>
-                      <img
-                        src={getProductImage(p)}
-                        alt={p.name}
-                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-                      />
-                    </div>
-
-                    <div style={{ padding: "28px", flex: 1, display: "flex", flexDirection: "column" }}>
-                      <div style={{ marginBottom: "20px" }}>
-                        <span style={{ fontSize: "12px", color: "#6366f1", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.category}</span>
-                        <h3 style={{ fontSize: "19px", fontWeight: "700", margin: "6px 0", color: "#1f2937" }}>{p.name}</h3>
-                        <span style={{ fontSize: "13px", color: "#9ca3af" }}>SKU: {p.sku}</span>
+        {loading ? (
+          <div className="empty">Loading products…</div>
+        ) : (
+          <>
+            <div className="grid">
+              {pagedProducts.length > 0 ? (
+                pagedProducts.map((p) => {
+                  const badge = stockBadge(p.status);
+                  const isSaved = savedIds.has(p._id);
+                  return (
+                    <div key={p._id} className="card">
+                      <div className="img-wrap">
+                        <img src={getProductImage(p)} alt={p.name} />
+                        <button
+                          className="save-btn"
+                          onClick={(e) => toggleSaved(e, p._id)}
+                          aria-label={isSaved ? "Remove from saved items" : "Save item"}
+                          title={isSaved ? "Remove from saved items" : "Save item"}
+                        >
+                          <Heart size={15} fill={isSaved ? "#2F6FED" : "none"} color={isSaved ? "#2F6FED" : "#6B7280"} />
+                        </button>
                       </div>
 
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-                        <span style={{ fontSize: "24px", fontWeight: "800", color: "#111827" }}>${p.price.toFixed(2)}</span>
-                        <span style={{ fontSize: "12px", fontWeight: "700", padding: "6px 14px", borderRadius: "100px", backgroundColor: badge.bg, color: badge.color }}>
-                          {p.status === "In stock" ? "In stock" : p.status === "Low stock" ? `${p.quantity} left` : "Out of stock"}
-                        </span>
-                      </div>
+                      <div className="card-body">
+                        <span className="category">{p.category}</span>
+                        <h3 className="name">{p.name}</h3>
+                        <span className="sku">SKU: {p.sku}</span>
 
-                      <button
-                        onClick={() => handleAddToCart(p)}
-                        disabled={p.status === "Out of stock"}
-                        style={{
-                          width: "100%", marginTop: "25px", padding: "18px",
-                          background: p.status === "Out of stock" ? "#9CA3AF" : "#2563eb",
-                          color: "#fff", border: "none", borderRadius: "16px", fontWeight: "700",
-                          cursor: p.status === "Out of stock" ? "not-allowed" : "pointer",
-                          fontSize: "16px", boxShadow: "0 4px 14px rgba(37, 99, 235, 0.2)"
-                        }}
-                      >
-                        {p.status === "Out of stock" ? "Out of stock" : "Add to Cart"}
-                      </button>
+                        <div className="price-row">
+                          <span className="price">${p.price.toFixed(2)}</span>
+                          <span className="badge" style={{ backgroundColor: badge.bg, color: badge.color }}>
+                            {p.status === "In stock" ? "In stock" : p.status === "Low stock" ? `${p.quantity} left` : "Out of stock"}
+                          </span>
+                        </div>
+
+                        <button
+                          className="add-btn"
+                          onClick={() => handleAddToCart(p)}
+                          disabled={p.status === "Out of stock"}
+                          style={{
+                            background: p.status === "Out of stock" ? "#9CA3AF" : "#2F6FED",
+                            color: "#fff",
+                            cursor: p.status === "Out of stock" ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {p.status === "Out of stock" ? "Out of stock" : "Add to Cart"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "100px", color: "#6b7280" }}>
-                <h2 style={{ fontSize: "24px" }}>No items found matching your search.</h2>
-                <button
-                  onClick={() => { setSearchQuery(""); setActiveCategory("All"); }}
-                  style={{ color: "#2563eb", background: "none", border: "none", cursor: "pointer", fontWeight: "600", marginTop: "10px" }}
-                >
-                  Clear filters
-                </button>
+                  );
+                })
+              ) : (
+                <div className="empty">
+                  <h3 style={{ fontSize: "17px", marginBottom: "8px" }}>No items found matching your search.</h3>
+                  <button
+                    onClick={() => { setSearchQuery(""); setActiveCategory("All"); }}
+                    style={{ color: "#2F6FED", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="pager">
+                <button className="pager-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <button key={n} className={`pager-btn${page === n ? " active" : ""}`} onClick={() => setPage(n)}>{n}</button>
+                ))}
+                <button className="pager-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</button>
               </div>
             )}
-          </div>
+          </>
+        )}
 
-          {totalPages > 1 && (
-            <div style={{ maxWidth: "1400px", margin: "30px auto 0", display: "flex", justifyContent: "center", gap: "8px" }}>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={pagerBtnStyle(page === 1)}>Prev</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                <button key={n} onClick={() => setPage(n)} style={pagerBtnStyle(false, page === n)}>{n}</button>
-              ))}
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={pagerBtnStyle(page === totalPages)}>Next</button>
-            </div>
-          )}
-        </>
-      )}
-
-      <div style={{ maxWidth: "1400px", margin: "40px auto 0", textAlign: "center", fontSize: "11.5px", color: "#9CA3AF", borderTop: "1px solid #E5E5E0", paddingTop: "16px" }}>
-        &copy; 2026 StockFlow WMS. All rights reserved. · Privacy Policy · Terms of Service
+        <div className="app-footer">
+          &copy; 2026 StockFlow WMS. All rights reserved. &middot; <a href="#footer" style={{ color: "#9CA3AF" }}>Privacy Policy</a> &middot; <a href="#footer" style={{ color: "#9CA3AF" }}>Terms of Service</a>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
-}
-
-function pagerBtnStyle(disabled, active) {
-  return {
-    padding: "8px 14px",
-    borderRadius: "8px",
-    border: "1px solid #D1D5DB",
-    background: active ? "#2563eb" : "#fff",
-    color: active ? "#fff" : "#374151",
-    fontWeight: 600,
-    fontSize: 13,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.5 : 1,
-  };
 }
