@@ -4,6 +4,7 @@ import axios from "axios";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
 import { Bell } from "lucide-react";
+import { getProductImage } from "../../assets/productImages";
 
 export default function CustomerBrowseProducts() {
   const navigate = useNavigate();
@@ -60,7 +61,7 @@ export default function CustomerBrowseProducts() {
       sku: product.sku,
       name: product.name,
       price: product.price,
-      image: product.imageUrl,
+      image: getProductImage(product),
       productId: product._id
     });
     navigate("/customer/checkout");
@@ -139,15 +140,11 @@ export default function CustomerBrowseProducts() {
                 return (
                   <div key={p._id} style={{ background: "#fff", borderRadius: "24px", border: "1px solid #e5e7eb", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" }}>
                     <div style={{ height: "260px", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", padding: "25px", borderBottom: "1px solid #f1f5f9" }}>
-                      {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                      ) : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5" width="72" height="72">
-                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                          <line x1="12" y1="22.08" x2="12" y2="12" />
-                        </svg>
-                      )}
+                      <img
+                        src={getProductImage(p)}
+                        alt={p.name}
+                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                      />
                     </div>
 
                     <div style={{ padding: "28px", flex: 1, display: "flex", flexDirection: "column" }}>
